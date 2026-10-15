@@ -142,3 +142,4 @@ details.item .body{display:flex;flex-direction:column;gap:12px;padding-bottom:14
 .lb .btn{background:#fff;color:#111;min-height:48px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:calc(100% - 32px);padding:12px 18px;border-radius:12px;background:var(--ink);color:var(--bg);font-weight:600;z-index:30;text-align:center}
 @media (prefers-reduced-motion:no-preference){button.vcard{transition:border-color .15s}}
+a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}

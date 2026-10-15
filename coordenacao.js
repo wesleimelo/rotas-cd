@@ -136,9 +136,9 @@
       if (rows.length) {
         wrap.append(h('div', null, h('button', {
           class: 'btn ghost', type: 'button', onclick: function () {
-            var out = [['Data', 'Placa', 'Veículo', 'Motorista', 'Saída', 'Chegada', 'Km inicial', 'Km final', 'Km rodado', 'Situação', 'Observações']];
+            var out = [['Data', 'Placa', 'Veículo', 'Motorista', 'Saída', 'Chegada', 'Km inicial', 'Km final', 'Km rodado', 'Situação', 'Observações', 'Local da saída', 'Local da chegada']];
             rows.slice().reverse().forEach(function (x) {
-              out.push([RC.fmtFull(x.start_at), x.plate, x.vehicle_name, x.driver_name, RC.fmtTime(x.start_at), x.end_at ? RC.fmtTime(x.end_at) : '', x.start_km, x.end_km == null ? '' : x.end_km, x.km_driven == null ? '' : x.km_driven, x.status === 'open' ? 'Em rota' : 'Finalizada', x.notes || '']);
+              out.push([RC.fmtFull(x.start_at), x.plate, x.vehicle_name, x.driver_name, RC.fmtTime(x.start_at), x.end_at ? RC.fmtTime(x.end_at) : '', x.start_km, x.end_km == null ? '' : x.end_km, x.km_driven == null ? '' : x.km_driven, x.status === 'open' ? 'Em rota' : 'Finalizada', x.notes || '', x.start_lat == null ? '' : RC.mapUrl(x.start_lat, x.start_lng), x.end_lat == null ? '' : RC.mapUrl(x.end_lat, x.end_lng)]);
             });
             RC.saveCsv('rotas-cd-' + flt.month, out);
           }
@@ -205,7 +205,10 @@
       x.notes ? h('div', { class: 'hint' }, 'Obs.: ' + x.notes) : null,
       h('div', { class: 'photos' },
         x.start_photo ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.showPhoto(x.start_photo, 'Saída · ' + x.plate + ' · km ' + RC.fmtKm(x.start_km)); } }, 'Foto da saída') : null,
-        x.end_photo ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.showPhoto(x.end_photo, 'Chegada · ' + x.plate + ' · km ' + RC.fmtKm(x.end_km)); } }, 'Foto da chegada') : null
+        x.end_photo ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.showPhoto(x.end_photo, 'Chegada · ' + x.plate + ' · km ' + RC.fmtKm(x.end_km)); } }, 'Foto da chegada') : null,
+        x.start_lat != null ? h('a', { class: 'btn ghost', href: RC.mapUrl(x.start_lat, x.start_lng), target: '_blank', rel: 'noopener' }, 'Mapa da saída') : null,
+        x.end_lat != null ? h('a', { class: 'btn ghost', href: RC.mapUrl(x.end_lat, x.end_lng), target: '_blank', rel: 'noopener' }, 'Mapa da chegada') : null,
+        x.start_lat == null && x.end_lat == null ? h('span', { class: 'hint' }, 'Sem localização') : null
       ),
       details
     );

@@ -156,7 +156,23 @@
 
   /* ---------- foto do odômetro ---------- */
   // Reduz a foto no celular (cerca de 100 KB) e carimba data e hora no canto.
-  RC.compress = function (file) {
+  // Pede a posição do celular (GPS). Devolve { lat, lng } ou null se negada, indisponível ou demorada.
+  RC.getLocation = function () {
+    return new Promise(function (res) {
+      if (!navigator.geolocation) { res(null); return; }
+      var done = false;
+      var timer = setTimeout(function () { if (!done) { done = true; res(null); } }, 12000);
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        if (done) return; done = true; clearTimeout(timer);
+        res({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      }, function () {
+        if (done) return; done = true; clearTimeout(timer); res(null);
+      }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+    });
+  };
+  RC.mapUrl = function (lat, lng) { return 'https://www.google.com/maps?q=' + Number(lat).toFixed(6) + ',' + Number(lng).toFixed(6); };
+
+  RC.compress = function (file, loc) {
     var url = URL.createObjectURL(file);
     return new Promise(function (res, rej) {
       var img = new Image();
@@ -164,7 +180,8 @@
       img.onerror = function () { rej(new Error('Não consegui abrir a foto. Tire outra.')); };
       img.src = url;
     }).then(function (img) {
-      var stamp = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ });
+      var stamp = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ })
+        + (loc ? ' · ' + loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5) : ' · sem localização');
       function attempt(max, q) {
         var s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
         var c = document.createElement('canvas');
@@ -174,6 +191,7 @@
         var fs = Math.max(14, Math.round(c.width * 0.035));
         x.font = '600 ' + fs + 'px sans-serif';
         var tw = x.measureText(stamp).width;
+        if (tw > c.width - fs) { fs = Math.floor(fs * (c.width - fs) / tw); x.font = '600 ' + fs + 'px sans-serif'; tw = x.measureText(stamp).width; }
         x.fillStyle = 'rgba(0,0,0,.62)';
         x.fillRect(0, c.height - fs * 1.7, tw + fs, fs * 1.7);
         x.fillStyle = '#fff';

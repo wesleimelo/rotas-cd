@@ -4,12 +4,12 @@
   var RC = window.RC, h = RC.h, $ = RC.$;
   var profile = null, board = [];
   var view = { tab: 'v', vehicleId: null, sig: '' };
-  var draft = { km: '', photo: null, ack: null, notes: '' };
+  var draft = { km: '', photo: null, loc: null, ack: null, notes: '' };
   var busy = false, pollT = null;
 
   function resetDraft() {
     if (draft.photo && draft.photo.url) URL.revokeObjectURL(draft.photo.url);
-    draft = { km: '', photo: null, ack: null, notes: '' };
+    draft = { km: '', photo: null, loc: null, ack: null, notes: '' };
   }
 
   /* ---------- início e saída ---------- */
@@ -119,13 +119,16 @@
     var inp = h('input', { id: inputId, type: 'file', accept: 'image/*', capture: 'environment' });
     inp.addEventListener('change', function () {
       var f = inp.files && inp.files[0]; if (!f) return;
-      onMsg('Preparando a foto…', 'warn');
-      RC.compress(f).then(function (p) {
-        if (draft.photo && draft.photo.url) URL.revokeObjectURL(draft.photo.url);
-        draft.photo = p; draft.ack = null;
-        prev.src = p.url; prev.hidden = false; btn.textContent = '📷 Trocar foto';
-        onMsg('');
-      }, function (e) { onMsg(RC.errText(e), 'err'); });
+      onMsg('Obtendo a localização e preparando a foto…', 'warn');
+      RC.getLocation().then(function (loc) {
+        return RC.compress(f, loc).then(function (p) {
+          if (draft.photo && draft.photo.url) URL.revokeObjectURL(draft.photo.url);
+          draft.photo = p; draft.loc = loc; draft.ack = null;
+          prev.src = p.url; prev.hidden = false; btn.textContent = '📷 Trocar foto';
+          if (loc) onMsg('');
+          else onMsg('Não consegui a localização. Ative o GPS e permita a localização para este site, depois tire a foto de novo. Se não conseguir, pode continuar sem ela.', 'warn');
+        });
+      }).catch(function (e) { onMsg(RC.errText(e), 'err'); });
     });
     if (draft.photo) { prev.src = draft.photo.url; prev.hidden = false; btn.textContent = '📷 Trocar foto'; }
     return h('div', { class: 'photo' }, inp, btn, prev);
@@ -164,7 +167,7 @@
     var path = null;
     try {
       path = await RC.uploadPhoto(profile.id, 'inicio', draft.photo.blob);
-      var r = await RC.sb.rpc('start_route', { p_vehicle: v.id, p_km: km, p_photo: path });
+      var r = await RC.sb.rpc('start_route', { p_vehicle: v.id, p_km: km, p_photo: path, p_lat: draft.loc ? draft.loc.lat : null, p_lng: draft.loc ? draft.loc.lng : null });
       if (r.error) throw r.error;
       RC.toast('Rota iniciada às ' + RC.fmtTime(r.data.start_at));
       busy = false; setTab('v');
@@ -222,7 +225,7 @@
     var path = null;
     try {
       path = await RC.uploadPhoto(profile.id, 'fim', draft.photo.blob);
-      var r = await RC.sb.rpc('finish_route', { p_route: v.route_id, p_km: km, p_photo: path, p_notes: (draft.notes || '').trim() || null });
+      var r = await RC.sb.rpc('finish_route', { p_route: v.route_id, p_km: km, p_photo: path, p_notes: (draft.notes || '').trim() || null, p_lat: draft.loc ? draft.loc.lat : null, p_lng: draft.loc ? draft.loc.lng : null });
       if (r.error) throw r.error;
       RC.toast('Rota finalizada: ' + RC.fmtKm(d) + ' km');
       busy = false; setTab('v');
