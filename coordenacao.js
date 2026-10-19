@@ -269,21 +269,33 @@
   async function renderPeople() {
     if (view.tab !== 'm') return;
     try {
-      loading(); await loadPeople();
+      loading(); await Promise.all([loadPeople(), loadVehicles()]);
       if (view.tab !== 'm') return;
+      var vname = {}; vehicles.forEach(function (v) { vname[v.id] = v.name + ' · ' + v.plate; });
+      function vehicleSelect(id, current) {
+        var sel = h('select', { id: id, class: 'input' }, h('option', { value: '' }, 'Todos os veículos (sem restrição)'));
+        vehicles.filter(function (v) { return v.active || v.id === current; }).forEach(function (v) { sel.append(h('option', { value: v.id }, vname[v.id] + (v.active ? '' : ' (inativo)'))); });
+        sel.value = current || '';
+        return sel;
+      }
       var wrap = h('div', { class: 'list' });
       wrap.append(h('h2', null, 'Novo motorista'));
       var fm = RC.msgBox();
       var fn = h('input', { id: 'newFull', class: 'input', type: 'text', maxlength: '60', placeholder: 'Ex.: João Pedro da Silva', autocomplete: 'off' });
       var fu = h('input', { id: 'newUser', class: 'input', type: 'text', maxlength: '30', placeholder: 'joao.pedro', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false' });
       var fp = h('input', { id: 'newPass', class: 'input', type: 'text', maxlength: '72', placeholder: 'Mínimo 6 caracteres', autocomplete: 'off' });
+      var fv = vehicleSelect('newVeh', '');
       var fb = h('button', { class: 'btn', type: 'submit' }, 'Cadastrar motorista');
       wrap.append(h('form', {
         class: 'card', onsubmit: async function (ev) {
           ev.preventDefault();
           fb.disabled = true; RC.setMsg(fm, 'Cadastrando…', 'warn');
           try {
-            await manage({ action: 'create_driver', full_name: fn.value, username: fu.value, password: fp.value });
+            var made = await manage({ action: 'create_driver', full_name: fn.value, username: fu.value, password: fp.value });
+            if (fv.value && made && made.id) {
+              var av = await sb.rpc('assign_vehicle', { p_user: made.id, p_vehicle: fv.value });
+              if (av.error) { RC.toast('Motorista cadastrado, mas o veículo não foi definido. Defina na lista abaixo.'); renderPeople(); return; }
+            }
             RC.toast('Motorista cadastrado'); renderPeople();
           } catch (e) { fb.disabled = false; RC.setMsg(fm, RC.errText(e), 'err'); }
         }
@@ -291,17 +303,30 @@
         h('div', { class: 'hint' }, 'O motorista entra com o usuário e a senha abaixo. Anote a senha para entregar a ele: ela não pode ser consultada depois, só redefinida.'),
         RC.lbl('newFull', 'Nome completo', fn),
         h('div', { class: 'two' }, RC.lbl('newUser', 'Usuário', fu), RC.lbl('newPass', 'Senha', fp)),
+        RC.lbl('newVeh', 'Veículo do motorista', fv),
+        h('div', { class: 'hint' }, 'O motorista só vê e só inicia rota nesse veículo. Deixe “Todos” para um motorista que reveza entre os veículos.'),
         fm, fb));
       wrap.append(h('h2', null, 'Acessos'));
       people.forEach(function (p) {
         var m = RC.msgBox();
         var np = h('input', { id: 'pw_' + p.id, class: 'input', type: 'text', maxlength: '72', placeholder: 'Nova senha (mínimo 6 caracteres)', autocomplete: 'off' });
         var me = p.id === profile.id;
+        var vs = p.role === 'coord' ? null : vehicleSelect('veh_' + p.id, p.vehicle_id);
         wrap.append(h('details', { class: 'item' },
           h('summary', null, h('span', null, p.full_name), h('span', { class: 'hint' }, '@' + p.username),
-            p.role === 'coord' ? h('span', { class: 'pill free' }, 'Coordenação') : null,
+            p.role === 'coord' ? h('span', { class: 'pill free' }, 'Coordenação') : h('span', { class: 'hint' }, p.vehicle_id && vname[p.vehicle_id] ? vname[p.vehicle_id] : 'Todos os veículos'),
             h('span', { class: 'pill ' + (p.active ? 'free' : 'off') }, p.active ? 'Ativo' : 'Inativo')),
           h('div', { class: 'body' },
+            p.role === 'coord' ? null : [
+              RC.lbl('veh_' + p.id, 'Veículo do motorista', vs),
+              h('div', { class: 'acts' }, h('button', {
+                class: 'btn small', type: 'button', onclick: async function () {
+                  var r = await sb.rpc('assign_vehicle', { p_user: p.id, p_vehicle: vs.value || null });
+                  if (r.error) { RC.setMsg(m, RC.errText(r.error), 'err'); return; }
+                  RC.toast('Veículo salvo'); renderPeople();
+                }
+              }, 'Salvar veículo'))
+            ],
             RC.lbl('pw_' + p.id, 'Redefinir senha', np), m,
             h('div', { class: 'acts' },
               h('button', {
