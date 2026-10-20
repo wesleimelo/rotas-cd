@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" fill="#17221C"/>
+  <g transform="translate(0,10)">
+    <!-- base do painel -->
+    <rect x="236" y="720" width="552" height="28" rx="14" fill="#2A3A32"/>
+    <!-- barras -->
+    <rect x="262" y="540" width="128" height="160" rx="22" fill="#3FBF93"/>
+    <rect x="448" y="430" width="128" height="270" rx="22" fill="#E9F4EE"/>
+    <rect x="634" y="320" width="128" height="380" rx="22" fill="#3FBF93"/>
+    <!-- rota subindo sobre as barras, terminando em marcador -->
+    <circle cx="326" cy="468" r="30" fill="#F3B55A"/>
+    <circle cx="512" cy="358" r="30" fill="#F3B55A"/>
+    <circle cx="698" cy="248" r="44" fill="#F3B55A"/>
+    <circle cx="698" cy="248" r="16" fill="#17221C"/>
+    <path d="M356 456 L482 372 M542 344 L664 262" stroke="#F3B55A" stroke-width="22" stroke-linecap="round"/>
+  </g>
+</svg>
