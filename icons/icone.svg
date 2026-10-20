@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" fill="#0D6B4E"/>
+  <g transform="translate(0,-34)">
+  <!-- mostrador -->
+  <path d="M252 560 A260 260 0 0 1 772 560" fill="none" stroke="#E9F4EE" stroke-width="46" stroke-linecap="round"/>
+  <g stroke="#E9F4EE" stroke-width="22" stroke-linecap="round" opacity=".85">
+    <line x1="512" y1="330" x2="512" y2="372"/>
+    <line x1="374" y1="376" x2="398" y2="410"/>
+    <line x1="650" y1="376" x2="626" y2="410"/>
+  </g>
+  <!-- ponteiro -->
+  <line x1="512" y1="560" x2="636" y2="438" stroke="#F3B55A" stroke-width="42" stroke-linecap="round"/>
+  <circle cx="512" cy="560" r="50" fill="#E9F4EE"/>
+  <circle cx="512" cy="560" r="20" fill="#0D6B4E"/>
+  <!-- odômetro -->
+  <rect x="262" y="664" width="500" height="150" rx="28" fill="#17221C"/>
+  <g fill="#E9F4EE" font-family="DejaVu Sans Mono, monospace" font-weight="700" font-size="112" text-anchor="middle">
+    <text x="322" y="765">1</text>
+    <text x="417" y="765">8</text>
+    <text x="512" y="765">4</text>
+    <text x="607" y="765">2</text>
+    <text x="702" y="765">7</text>
+  </g>
+  <g stroke="#2A3A32" stroke-width="6">
+    <line x1="370" y1="684" x2="370" y2="794"/><line x1="465" y1="684" x2="465" y2="794"/>
+    <line x1="560" y1="684" x2="560" y2="794"/><line x1="655" y1="684" x2="655" y2="794"/>
+  </g>
+</g>
+</svg>
