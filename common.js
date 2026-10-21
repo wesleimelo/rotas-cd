@@ -172,7 +172,7 @@
   };
   RC.mapUrl = function (lat, lng) { return 'https://www.google.com/maps?q=' + Number(lat).toFixed(6) + ',' + Number(lng).toFixed(6); };
 
-  RC.compress = function (file, loc) {
+  RC.compress = function (file, loc, manual) {
     var url = URL.createObjectURL(file);
     return new Promise(function (res, rej) {
       var img = new Image();
@@ -180,8 +180,9 @@
       img.onerror = function () { rej(new Error('Não consegui abrir a foto. Tire outra.')); };
       img.src = url;
     }).then(function (img) {
-      var stamp = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ })
-        + (loc ? ' · ' + loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5) : ' · sem localização');
+      // manual = { at: Date } para foto lançada pela coordenação: mostra o horário informado, sem GPS.
+      var stamp = (manual && manual.at ? manual.at : new Date()).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ })
+        + (manual ? ' · Lançado pela coordenação' : (loc ? ' · ' + loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5) : ' · sem localização'));
       function attempt(max, q) {
         var s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
         var c = document.createElement('canvas');

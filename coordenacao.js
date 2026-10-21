@@ -25,7 +25,7 @@
     flt = { month: RC.lastMonths(1)[0], vehicle: 'all', driver: 'all' };
     setTab('p');
     clearInterval(pollT);
-    pollT = setInterval(function () { if (!document.hidden && profile && view.tab === 'p') renderPanel(); }, 30000);
+    pollT = setInterval(function () { if (!document.hidden && profile && view.tab === 'p' && !$('view').querySelector('details[open]')) renderPanel(); }, 30000);
   }
   function setTab(t) {
     view.tab = t;
@@ -66,10 +66,65 @@
   function sum(rows) { return rows.reduce(function (a, x) { return a + (x.km_driven || 0); }, 0); }
 
   /* ---------- painel ---------- */
+  // Lançamento manual: a coordenação sobe a foto e o km que o motorista mandou por fora do app.
+  function nowLocalInput() {
+    var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  }
+  function manualForm(v) {
+    var open = !!v.route_id;
+    var id = v.vehicle_id || v.id;
+    var m = RC.msgBox();
+    var drv = null;
+    if (!open) {
+      drv = h('select', { id: 'md_' + id, class: 'input' }, h('option', { value: '' }, 'Escolha o motorista'));
+      people.filter(function (x) { return x.role === 'driver' && x.active; }).forEach(function (x) { drv.append(h('option', { value: x.id }, x.full_name)); });
+    }
+    var km = h('input', { id: 'mk_' + id, class: 'input', type: 'text', inputmode: 'numeric', placeholder: 'Km do odômetro' });
+    var at = h('input', { id: 'ma_' + id, class: 'input', type: 'datetime-local', value: nowLocalInput() });
+    var file = h('input', { id: 'mf_' + id, class: 'input', type: 'file', accept: 'image/*' });
+    var nt = open ? h('input', { id: 'mn_' + id, class: 'input', type: 'text', maxlength: '200' }) : null;
+    var send = h('button', { class: 'btn small', type: 'button' }, open ? 'Lançar fechamento' : 'Lançar início');
+    send.addEventListener('click', async function () {
+      var k = RC.parseKm(km.value), f = file.files && file.files[0], when = at.value ? new Date(at.value) : null;
+      if (!open && !drv.value) { RC.setMsg(m, 'Escolha o motorista.', 'err'); return; }
+      if (k == null) { RC.setMsg(m, 'Digite o km só com números.', 'err'); return; }
+      if (!when || isNaN(when)) { RC.setMsg(m, 'Informe a data e a hora.', 'err'); return; }
+      if (!f) { RC.setMsg(m, 'Escolha a foto do odômetro.', 'err'); return; }
+      send.disabled = true; RC.setMsg(m, 'Enviando…', 'warn');
+      var path = null;
+      try {
+        var ph = await RC.compress(f, null, { at: when });
+        path = await RC.uploadPhoto(profile.id, open ? 'fim' : 'inicio', ph.blob);
+        var r = open
+          ? await sb.rpc('coord_finish_route', { p_route: v.route_id, p_km: k, p_photo: path, p_notes: nt.value.trim() || null, p_at: when.toISOString() })
+          : await sb.rpc('coord_start_route', { p_vehicle: id, p_driver: drv.value, p_km: k, p_photo: path, p_at: when.toISOString() });
+        if (r.error) throw r.error;
+        RC.toast(open ? 'Fechamento lançado' : 'Início lançado');
+        renderPanel();
+      } catch (e) {
+        if (path) RC.removePhoto(path);
+        RC.setMsg(m, RC.errText(e), 'err'); send.disabled = false;
+      }
+    });
+    return h('details', { class: 'item' },
+      h('summary', null, open ? 'Lançar fechamento manual' : 'Lançar início manual'),
+      h('div', { class: 'body' },
+        drv ? RC.lbl('md_' + id, 'Motorista', drv) : null,
+        RC.lbl('mk_' + id, open ? 'Km final' : 'Km inicial', km),
+        RC.lbl('ma_' + id, open ? 'Data e hora da chegada' : 'Data e hora da saída', at),
+        RC.lbl('mf_' + id, 'Foto do odômetro', file),
+        nt ? RC.lbl('mn_' + id, 'Observações', nt) : null,
+        m,
+        h('div', { class: 'acts' }, send),
+        h('div', { class: 'hint' }, 'Use quando o motorista não conseguir usar o app e mandar a foto e o km por outro meio. O registro fica marcado como lançado pela coordenação.')
+      ));
+  }
+
   async function renderPanel() {
     if (view.tab !== 'p') return;
     try {
-      var results = await Promise.all([sb.rpc('vehicle_board'), loadRoutes(RC.lastMonths(1)[0])]);
+      var results = await Promise.all([sb.rpc('vehicle_board'), loadRoutes(RC.lastMonths(1)[0]), loadPeople()]);
       if (view.tab !== 'p') return;
       if (results[0].error) throw results[0].error;
       var board = results[0].data || [], rows = results[1];
@@ -85,7 +140,8 @@
           h('div', { class: 'row' }, RC.plate(v.plate), h('span', { class: 'pill ' + (open ? 'run' : 'free') }, open ? 'Em rota' : 'No CD')),
           h('div', { class: 'vname' }, v.name),
           h('div', { class: 'vmeta' }, meta),
-          open ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.showPhoto(v.start_photo, 'Odômetro na saída · ' + v.plate); } }, 'Foto da saída') : null
+          open ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.showPhoto(v.start_photo, 'Odômetro na saída · ' + v.plate); } }, 'Foto da saída') : null,
+          manualForm(v)
         ));
       });
       $('view').replaceChildren(h('div', { class: 'list' },
@@ -143,6 +199,7 @@
             RC.saveCsv('rotas-cd-' + flt.month, out);
           }
         }, 'Baixar planilha (CSV)')));
+        wrap.append(xlsxBlock());
       } else {
         wrap.append(h('div', { class: 'empty' }, 'Nenhuma rota neste filtro.'));
       }
@@ -150,6 +207,28 @@
       $('view').replaceChildren(tools, wrap);
       $('view').style.display = 'flex'; $('view').style.flexDirection = 'column'; $('view').style.gap = '16px';
     } catch (e) { fail(e); }
+  }
+  // Preenche a planilha de controle de KM da coordenação (um arquivo .xlsx escolhido no computador).
+  function xlsxBlock() {
+    var xm = RC.msgBox();
+    var inp = h('input', { id: 'xlsxIn', type: 'file', accept: '.xlsx', hidden: true });
+    var btn = h('button', { class: 'btn ghost', type: 'button', onclick: function () { inp.click(); } }, 'Preencher minha planilha de controle (.xlsx)');
+    inp.addEventListener('change', async function () {
+      var f = inp.files && inp.files[0];
+      if (!f) return;
+      btn.disabled = true; RC.setMsg(xm, 'Preenchendo a planilha de ' + RC.monthLabel(flt.month) + '…', 'warn');
+      try {
+        var fresh = await loadRoutes(flt.month);
+        var out = await RC.fillFromFile(f, flt.month, fresh, vehicles, RC.TZ);
+        var name = f.name.replace(/\.xlsx$/i, '') + '-' + flt.month + '.xlsx';
+        RC.saveBlob(new Blob([out.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), name);
+        RC.setMsg(xm, RC.fillSummary(out.report, RC.monthLabel(flt.month)), out.report.noColumn.length || out.report.warnings.length || out.report.overwritten ? 'warn' : 'ok');
+      } catch (e) { RC.setMsg(xm, RC.errText(e), 'err'); }
+      btn.disabled = false;
+    });
+    return h('div', { class: 'list' }, btn, inp,
+      h('div', { class: 'hint' }, 'Escolha o arquivo da sua planilha (a de controle de KM da frota). O sistema preenche o KM Início e o KM Final de cada dia do mês selecionado e devolve o arquivo no mesmo formato. A planilha não sai do seu computador.'),
+      xm);
   }
   function routeRow(x) {
     var open = x.status === 'open';
@@ -203,6 +282,7 @@
       h('div', { class: 'hint' }, RC.fmtDay(x.start_at) + ' · ' + x.driver_name + ' · saída ' + RC.fmtTime(x.start_at) + (open ? '' : ' · chegada ' + RC.fmtTime(x.end_at))),
       h('div', { class: 'kms' }, h('span', null, RC.fmtKm(x.start_km)), open ? null : [h('span', null, '→'), h('span', null, RC.fmtKm(x.end_km)), h('span', { class: 'big' }, '= ' + RC.fmtKm(x.km_driven) + ' km')]),
       x.notes ? h('div', { class: 'hint' }, 'Obs.: ' + x.notes) : null,
+      (x.start_by || x.end_by) ? h('div', { class: 'hint' }, 'Lançado pela coordenação' + (x.start_by && x.end_by ? ' (saída e chegada)' : x.start_by ? ' (saída)' : ' (chegada)')) : null,
       h('div', { class: 'photos' },
         x.start_photo ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.showPhoto(x.start_photo, 'Saída · ' + x.plate + ' · km ' + RC.fmtKm(x.start_km)); } }, 'Foto da saída') : null,
         x.end_photo ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.showPhoto(x.end_photo, 'Chegada · ' + x.plate + ' · km ' + RC.fmtKm(x.end_km)); } }, 'Foto da chegada') : null,
