@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" role="img" aria-label="Caminhão">
+  <rect x="26" y="2" width="68" height="40" rx="3" fill="#fafafa" stroke="#b9bec3" stroke-width="2"/>
+  <rect x="6" y="38" width="9" height="20" rx="3" fill="#2b2f33"/><rect x="105" y="38" width="9" height="20" rx="3" fill="#2b2f33"/>
+  <path d="M20 38 Q60 32 100 38 L104 66 L104 80 Q104 86 98 86 L22 86 Q16 86 16 80 L16 66 Z" fill="#f7f7f7" stroke="#b9bec3" stroke-width="2"/>
+  <path d="M24 42 Q60 37 96 42 L98 62 Q60 58 22 62 Z" fill="#2c3a45"/>
+  <path d="M30 45 Q60 41 90 45 L91 51 Q60 47 29 51 Z" fill="#46596a" opacity=".7"/>
+  <rect x="22" y="66" width="14" height="8" rx="3" fill="#ffe9a8" stroke="#b9bec3"/><rect x="84" y="66" width="14" height="8" rx="3" fill="#ffe9a8" stroke="#b9bec3"/>
+  <rect x="42" y="66" width="36" height="12" rx="3" fill="#3a4047"/><path d="M46 70h28M46 74h28" stroke="#80878e" stroke-width="2"/>
+  <rect x="18" y="78" width="84" height="9" rx="4" fill="#d5d9dc" stroke="#b9bec3"/>
+  <rect x="24" y="87" width="14" height="10" rx="3" fill="#1f2326"/><rect x="82" y="87" width="14" height="10" rx="3" fill="#1f2326"/>
+</svg>

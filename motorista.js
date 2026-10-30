@@ -35,7 +35,7 @@
   function setTab(t) {
     view.tab = t; view.vehicleId = null; view.sig = '';
     resetDraft();
-    if (t === 'm') renderMine(); else loadBoard(true);
+    if (t === 'm') renderMine(); else if (t === 'e') renderSchedule(); else loadBoard(true);
   }
   function openVehicle(id) { view.vehicleId = id; view.sig = ''; resetDraft(); render(true); window.scrollTo(0, 0); }
 
@@ -48,11 +48,16 @@
     }
     RC.banner('');
     board = r.data || [];
+    try {
+      var sr = await RC.sb.from('schedule').select('*').eq('day', RC.todayISO()).eq('driver_id', profile.id);
+      pendingAccept = (sr.data || []).filter(function (e) { return !e.accepted_at; }).length;
+    } catch (e) { pendingAccept = 0; }
     render(force);
   }
   function render(force) {
     $('tabV').setAttribute('aria-current', view.tab === 'v' ? 'page' : 'false');
     $('tabM').setAttribute('aria-current', view.tab === 'm' ? 'page' : 'false');
+    $('tabE').setAttribute('aria-current', view.tab === 'e' ? 'page' : 'false');
     if (view.tab !== 'v') return;
     if (view.vehicleId) {
       var v = findVehicle(view.vehicleId);
@@ -66,6 +71,7 @@
     for (var i = 0; i < board.length; i++) if (board[i].id === id) return board[i];
     return null;
   }
+  var pendingAccept = 0;
   function renderBoard() {
     var box = $('view'); box.replaceChildren();
     if (!board.length) {
@@ -86,6 +92,9 @@
       ));
     });
     box.append(h('div', { class: 'list' },
+      pendingAccept ? h('div', { class: 'card' },
+        h('strong', null, 'Você tem ' + pendingAccept + (pendingAccept === 1 ? ' rota' : ' rotas') + ' hoje para aceitar'),
+        h('button', { class: 'btn', type: 'button', onclick: function () { setTab('e'); } }, 'Ver escala e aceitar')) : null,
       h('div', { class: 'sum' }, h('span', null, running + ' em rota'), h('span', null, '·'), h('span', null, (board.length - running) + ' no CD')),
       grid
     ));
@@ -266,6 +275,7 @@
   /* ---------- minhas rotas ---------- */
   async function renderMine() {
     $('tabV').setAttribute('aria-current', 'false');
+    $('tabE').setAttribute('aria-current', 'false');
     $('tabM').setAttribute('aria-current', 'page');
     var box = $('view');
     box.replaceChildren(h('div', { class: 'empty' }, 'Carregando…'));
@@ -290,9 +300,43 @@
     box.replaceChildren(wrap);
   }
 
+  /* ---------- escala ---------- */
+  async function renderSchedule() {
+    $('tabV').setAttribute('aria-current', 'false');
+    $('tabM').setAttribute('aria-current', 'false');
+    $('tabE').setAttribute('aria-current', 'page');
+    var box = $('view');
+    box.replaceChildren(h('div', { class: 'empty' }, 'Carregando…'));
+    try {
+    var today = RC.todayISO();
+    var r = await RC.sb.from('schedule').select('*').gte('day', today).lte('day', RC.addDays(today, 13)).order('day').order('sort');
+    if (view.tab !== 'e') return;
+    if (r.error) { box.replaceChildren(h('div', { class: 'empty' }, RC.errText(r.error))); return; }
+    var rows = r.data || [];
+    var wrap = h('div', { class: 'list' });
+    var days = {};
+    rows.forEach(function (e) { (days[e.day] = days[e.day] || []).push(e); });
+    var mineToday = (days[today] || []).filter(function (e) { return e.driver_id === profile.id; }).length;
+    if (mineToday) wrap.append(h('div', { class: 'hint' }, 'Você tem ' + mineToday + (mineToday === 1 ? ' rota' : ' rotas') + ' hoje. Toque em "Aceitar rota" para confirmar.'));
+    var opts = {
+      me: profile.id,
+      onAccept: async function (e) {
+        var ar = await RC.sb.rpc('accept_schedule', { p_id: e.id });
+        if (ar.error) { RC.toast(RC.errText(ar.error)); renderSchedule(); return; }
+        RC.toast('Rota aceita'); renderSchedule();
+      }
+    };
+    wrap.append(RC.scheduleDay(today, days[today] || [], opts));
+    Object.keys(days).filter(function (d) { return d !== today; }).sort().forEach(function (d) { wrap.append(RC.scheduleDay(d, days[d], opts)); });
+    if (!rows.length) wrap.append(h('div', { class: 'empty' }, 'A coordenação ainda não montou a escala dos próximos dias.'));
+    box.replaceChildren(wrap);
+    } catch (e) { if (view.tab === 'e') box.replaceChildren(h('div', { class: 'empty' }, RC.errText(e))); }
+  }
+
   /* ---------- começo ---------- */
   $('tabV').addEventListener('click', function () { setTab('v'); });
   $('tabM').addEventListener('click', function () { setTab('m'); });
+  $('tabE').addEventListener('click', function () { setTab('e'); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden && profile && view.tab === 'v') loadBoard(false); });
 
   async function init() {

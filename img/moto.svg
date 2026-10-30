@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" role="img" aria-label="Moto">
+  <circle cx="28" cy="70" r="18" fill="#1f2326"/><circle cx="28" cy="70" r="9" fill="#d5d9dc"/>
+  <circle cx="94" cy="70" r="18" fill="#1f2326"/><circle cx="94" cy="70" r="9" fill="#d5d9dc"/>
+  <path d="M28 70 L48 44 L74 44 L94 70" fill="none" stroke="#b9bec3" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M40 40 Q60 28 80 40 L84 52 L44 52 Z" fill="#f7f7f7" stroke="#b9bec3" stroke-width="2"/>
+  <rect x="40" y="34" width="34" height="9" rx="4" fill="#2c3a45"/>
+  <path d="M74 44 L86 24 L98 24" fill="none" stroke="#2b2f33" stroke-width="5" stroke-linecap="round"/>
+  <rect x="88" y="30" width="12" height="9" rx="4" fill="#ffe9a8" stroke="#b9bec3"/>
+  <rect x="54" y="52" width="22" height="14" rx="3" fill="#3a4047"/>
+</svg>

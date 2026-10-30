@@ -83,6 +83,60 @@
   };
   RC.lbl = function (id, text, input) { return h('div', { class: 'field' }, h('label', { for: id }, text), input); };
   RC.plate = function (p) { return h('span', { class: 'plate' }, h('span', null, p)); };
+
+  /* ---------- escala de rotas ---------- */
+  RC.todayISO = function () { return new Date().toLocaleDateString('sv-SE', { timeZone: TZ }); };
+  RC.addDays = function (iso, n) { var p = iso.split('-'); var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return d.toISOString().slice(0, 10); };
+  RC.weekMonday = function (iso) { var p = iso.split('-'); var dow = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay(); return RC.addDays(iso, dow === 0 ? -6 : 1 - dow); };
+  RC.dayLong = function (iso) {
+    var p = iso.split('-');
+    var t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).toLocaleDateString('pt-BR', { weekday: 'long', timeZone: 'UTC' });
+    return t.charAt(0).toUpperCase() + t.slice(1).replace('-feira', '') + ' ' + p[2] + '/' + p[1];
+  };
+  RC.shortDate = function (iso) { var p = iso.split('-'); return p[2] + '/' + p[1]; };
+  RC.labelClass = function (label) {
+    var t = String(label).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (/MANHA/.test(t)) return 'l-blue';
+    if (/TARDE/.test(t)) return 'l-gray';
+    if (/CAF/.test(t)) return 'l-orange';
+    return 'l-green';
+  };
+  // Cartão de um dia (estilo do cartão da coordenação). entries: linhas da tabela schedule.
+  // opts: { me: id do usuário (destaca as dele), showDriver: mostra o nome e o aceite (coordenação),
+  //         onRemove: function(entry) mostra o botão de apagar, onAccept: function(entry) botão "Aceitar rota" nas rotas dele }
+  RC.kindName = { van: 'Van', caminhao: 'Caminhão', moto: 'Moto' };
+  RC.scheduleDay = function (iso, entries, opts) {
+    opts = opts || {};
+    var list = entries.slice().sort(function (a, b) { return (a.sort - b.sort) || String(a.time_text || '').localeCompare(String(b.time_text || '')) || a.label.localeCompare(b.label); });
+    var box = h('div', { class: 'esc-day' }, h('div', { class: 'esc-head' }, RC.dayLong(iso) + (iso === RC.todayISO() ? ' · hoje' : '')));
+    if (!list.length) box.append(h('div', { class: 'esc-empty' }, 'Sem rotas escaladas'));
+    list.forEach(function (e) {
+      var mine = opts.me && e.driver_id === opts.me;
+      var kind = RC.kindName[e.kind] ? e.kind : 'van';
+      var status = null;
+      if (e.driver_id && (opts.showDriver || mine)) {
+        status = e.accepted_at
+          ? h('span', { class: 'esc-ok' }, '✔ Aceita ' + RC.fmtTime(e.accepted_at))
+          : h('span', { class: 'esc-wait' }, 'Aguardando aceite');
+      }
+      var sub = [];
+      if (opts.showDriver && e.driver_name) sub.push(h('span', { class: 'esc-drv' }, e.driver_name));
+      if (!opts.showDriver && mine) sub.push(h('span', { class: 'esc-drv' }, 'Sua rota'));
+      if (status) sub.push(status);
+      if (mine && !e.accepted_at && opts.onAccept) sub.push(h('button', { class: 'esc-accept', type: 'button', onclick: function (ev) { ev.currentTarget.disabled = true; opts.onAccept(e); } }, 'Aceitar rota'));
+      box.append(h('div', { class: 'esc-row' + (mine ? ' mine' : '') },
+        h('img', { class: 'esc-img', src: 'img/' + kind + '.svg', alt: RC.kindName[kind], width: '84', height: '70' }),
+        h('div', { class: 'esc-info' },
+          h('div', { class: 'esc-top' },
+            h('span', { class: 'esc-label ' + RC.labelClass(e.label) }, e.label),
+            e.time_text ? h('span', { class: 'esc-time' }, e.time_text) : null,
+            opts.onRemove ? h('button', { class: 'esc-x', type: 'button', 'aria-label': 'Apagar esta rota da escala', onclick: function () { opts.onRemove(e); } }, '×') : null),
+          h('div', { class: 'esc-plate' }, e.plate),
+          sub.length ? h('div', { class: 'esc-sub' }, sub) : null)
+      ));
+    });
+    return box;
+  };
   RC.odo = function (n) {
     var s = String(n), g = [];
     for (var i = s.length; i > 0; i -= 3) g.unshift(s.slice(Math.max(0, i - 3), i));

@@ -8,7 +8,7 @@
   var cache = { month: '', routes: [] };
   var vehicles = [], people = [];
   var pollT = null;
-  var TABS = ['P', 'H', 'R', 'M', 'V'];
+  var TABS = ['P', 'E', 'H', 'R', 'M', 'V'];
 
   /* ---------- entrada e navegação ---------- */
   function showLogin() {
@@ -31,7 +31,7 @@
     view.tab = t;
     TABS.forEach(function (k) { $('tab' + k).setAttribute('aria-current', k.toLowerCase() === t ? 'page' : 'false'); });
     RC.banner('');
-    ({ p: renderPanel, h: function () { return renderHistory(true); }, r: renderSummary, m: renderPeople, v: renderVehicles })[t]();
+    ({ p: renderPanel, e: renderSchedule, h: function () { return renderHistory(true); }, r: renderSummary, m: renderPeople, v: renderVehicles })[t]();
   }
   function loading() { $('view').replaceChildren(h('div', { class: 'empty' }, 'Carregando…')); }
   function fail(e) { if (/permission|JWT/i.test((e && e.message) || '')) { RC.signOut(); return; } $('view').replaceChildren(h('div', { class: 'empty' }, RC.errText(e))); }
@@ -124,10 +124,13 @@
   async function renderPanel() {
     if (view.tab !== 'p') return;
     try {
-      var results = await Promise.all([sb.rpc('vehicle_board'), loadRoutes(RC.lastMonths(1)[0]), loadPeople()]);
+      var results = await Promise.all([sb.rpc('vehicle_board'), loadRoutes(RC.lastMonths(1)[0]), loadPeople(), sb.from('schedule').select('*').eq('day', RC.todayISO()).order('sort')]);
       if (view.tab !== 'p') return;
       if (results[0].error) throw results[0].error;
       var board = results[0].data || [], rows = results[1];
+      var todaySched = (results[3] && !results[3].error && results[3].data) || [];
+      var withDriver = todaySched.filter(function (e) { return e.driver_id; });
+      var acceptedN = withDriver.filter(function (e) { return e.accepted_at; }).length;
       var today = new Date().toLocaleDateString('sv-SE', { timeZone: RC.TZ });
       var todayRows = rows.filter(function (x) { return new Date(x.start_at).toLocaleDateString('sv-SE', { timeZone: RC.TZ }) === today; });
       var running = board.filter(function (v) { return v.route_id; }).length;
@@ -150,8 +153,110 @@
           h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Rotas hoje'), h('b', null, String(todayRows.length))),
           h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Km no mês'), h('b', null, RC.fmtKm(sum(rows))))
         ),
+        todaySched.length ? h('div', { class: 'list' },
+          h('h2', null, 'Escala de hoje' + (withDriver.length ? ' · ' + acceptedN + ' de ' + withDriver.length + ' aceitas' : '')),
+          RC.scheduleDay(RC.todayISO(), todaySched, { showDriver: true })) : null,
         board.length ? grid : h('div', { class: 'empty' }, 'Nenhum veículo ativo. Cadastre na aba Veículos.')
       ));
+    } catch (e) { fail(e); }
+  }
+
+
+  /* ---------- escala ---------- */
+  var schedWeek = null;
+  var LABELS = ['ALMOX MANHÃ', 'ALMOX TARDE', 'CAF'];
+  async function renderSchedule() {
+    if (view.tab !== 'e') return;
+    if (!schedWeek) schedWeek = RC.weekMonday(RC.todayISO());
+    try {
+      var from = schedWeek, to = RC.addDays(schedWeek, 6);
+      var res = await Promise.all([
+        sb.from('schedule').select('*').gte('day', from).lte('day', to).order('sort'),
+        sb.from('vehicles').select('*').eq('active', true).order('name'),
+        loadPeople()
+      ]);
+      if (view.tab !== 'e') return;
+      if (res[0].error) throw res[0].error;
+      if (res[1].error) throw res[1].error;
+      var entries = res[0].data || [], vs = res[1].data || [];
+      var drivers = people.filter(function (x) { return x.role === 'driver' && x.active; });
+      var msg = RC.msgBox();
+      var dl = h('datalist', { id: 'escLabels' });
+      var seen = {};
+      LABELS.concat(entries.map(function (e) { return e.label; })).forEach(function (l) { if (!seen[l]) { seen[l] = 1; dl.append(h('option', { value: l })); } });
+
+      var nav = h('div', { class: 'weeknav' },
+        h('button', { class: 'btn ghost', type: 'button', 'aria-label': 'Semana anterior', onclick: function () { schedWeek = RC.addDays(schedWeek, -7); renderSchedule(); } }, '‹'),
+        h('b', null, 'Semana ' + RC.shortDate(from) + ' a ' + RC.shortDate(RC.addDays(from, 5))),
+        h('button', { class: 'btn ghost', type: 'button', 'aria-label': 'Próxima semana', onclick: function () { schedWeek = RC.addDays(schedWeek, 7); renderSchedule(); } }, '›')
+      );
+      var copyBtn = h('button', {
+        class: 'btn ghost', type: 'button', onclick: async function () {
+          if (entries.length) { RC.setMsg(msg, 'Esta semana já tem rotas. Apague as rotas antes de copiar a semana anterior.', 'err'); return; }
+          copyBtn.disabled = true;
+          try {
+            var pr = await sb.from('schedule').select('*').gte('day', RC.addDays(from, -7)).lte('day', RC.addDays(from, -1));
+            if (pr.error) throw pr.error;
+            if (!(pr.data || []).length) { RC.setMsg(msg, 'A semana anterior não tem rotas para copiar.', 'warn'); copyBtn.disabled = false; return; }
+            var rows = pr.data.map(function (e) {
+              var v = vs.filter(function (x) { return x.id === e.vehicle_id; })[0];
+              var d = drivers.filter(function (x) { return x.id === e.driver_id; })[0];
+              return { day: RC.addDays(e.day, 7), label: e.label, time_text: e.time_text, vehicle_id: v ? v.id : null, plate: v ? v.plate : e.plate, kind: v ? v.kind : e.kind, driver_id: d ? d.id : null, driver_name: d ? d.full_name : null, sort: e.sort };
+            });
+            var ins = await sb.from('schedule').insert(rows);
+            if (ins.error) throw ins.error;
+            RC.toast('Semana copiada'); renderSchedule();
+          } catch (e) { RC.setMsg(msg, RC.errText(e), 'err'); copyBtn.disabled = false; }
+        }
+      }, 'Copiar a semana anterior');
+
+      var wrap = h('div', { class: 'list' }, nav, h('div', null, copyBtn), msg, dl,
+        h('div', { class: 'hint' }, 'Monte a escala de cada dia. Os motoristas veem na aba Escala do app. Dica: use "Copiar a semana anterior" e ajuste só o que mudou.'));
+      for (var i = 0; i < 6; i++) wrap.append(dayBlock(RC.addDays(from, i)));
+      $('view').replaceChildren(wrap);
+      $('view').style.display = ''; 
+
+      function dayBlock(iso) {
+        var dayEntries = entries.filter(function (e) { return e.day === iso; });
+        var card = RC.scheduleDay(iso, dayEntries, {
+          showDriver: true,
+          onRemove: async function (e) {
+            var r = await sb.from('schedule').delete().eq('id', e.id);
+            if (r.error) { RC.toast(RC.errText(r.error)); return; }
+            RC.toast('Rota removida da escala'); renderSchedule();
+          }
+        });
+        var id = iso.replace(/-/g, '');
+        var m = RC.msgBox();
+        var lab = h('input', { id: 'el_' + id, class: 'input', type: 'text', maxlength: '30', list: 'escLabels', placeholder: 'Ex.: ALMOX MANHÃ, CAF' });
+        var tm = h('input', { id: 'et_' + id, class: 'input', type: 'text', maxlength: '12', placeholder: 'Ex.: 11H (opcional)' });
+        var vsel = h('select', { id: 'ev_' + id, class: 'input' }, h('option', { value: '' }, 'Escolha o veículo'));
+        vs.forEach(function (v) { vsel.append(h('option', { value: v.id }, v.plate + ' · ' + v.name)); });
+        var dsel = h('select', { id: 'ed_' + id, class: 'input' }, h('option', { value: '' }, 'Sem motorista definido'));
+        drivers.forEach(function (d) { dsel.append(h('option', { value: d.id }, d.full_name)); });
+        var add = h('button', { class: 'btn small', type: 'button' }, 'Adicionar à escala');
+        add.addEventListener('click', async function () {
+          var label = lab.value.trim().toUpperCase();
+          if (!label) { RC.setMsg(m, 'Escreva o destino ou turno (ex.: CAF).', 'err'); return; }
+          var v = vs.filter(function (x) { return x.id === vsel.value; })[0];
+          if (!v) { RC.setMsg(m, 'Escolha o veículo.', 'err'); return; }
+          var d = drivers.filter(function (x) { return x.id === dsel.value; })[0];
+          add.disabled = true;
+          var r = await sb.from('schedule').insert({ day: iso, label: label, time_text: tm.value.trim().toUpperCase() || null, vehicle_id: v.id, plate: v.plate, kind: v.kind, driver_id: d ? d.id : null, driver_name: d ? d.full_name : null, sort: dayEntries.length });
+          if (r.error) { RC.setMsg(m, RC.errText(r.error), 'err'); add.disabled = false; return; }
+          RC.toast('Adicionado à escala'); renderSchedule();
+        });
+        card.append(h('details', { class: 'esc-add' },
+          h('summary', null, '+ Adicionar rota neste dia'),
+          h('div', { class: 'body' },
+            RC.lbl('el_' + id, 'Destino ou turno', lab),
+            RC.lbl('et_' + id, 'Horário', tm),
+            RC.lbl('ev_' + id, 'Veículo', vsel),
+            RC.lbl('ed_' + id, 'Motorista', dsel),
+            m, h('div', { class: 'acts' }, add))
+        ));
+        return card;
+      }
     } catch (e) { fail(e); }
   }
 
@@ -428,6 +533,13 @@
   }
 
   /* ---------- veículos ---------- */
+
+  function kindSelect(id, cur) {
+    var k = h('select', { id: id, class: 'input' });
+    [['van', 'Van'], ['caminhao', 'Caminhão'], ['moto', 'Moto']].forEach(function (o) { k.append(h('option', { value: o[0] }, o[1])); });
+    k.value = cur || 'van';
+    return k;
+  }
   async function renderVehicles() {
     if (view.tab !== 'v') return;
     try {
@@ -437,6 +549,7 @@
       wrap.append(h('h2', null, 'Novo veículo'));
       var vm = RC.msgBox();
       var vp = h('input', { id: 'newPlate', class: 'input', type: 'text', maxlength: '7', placeholder: 'ABC1D23', autocapitalize: 'characters', autocomplete: 'off' });
+      var vk = kindSelect('newKind', 'van');
       var vn = h('input', { id: 'newName', class: 'input', type: 'text', maxlength: '30', placeholder: 'Ex.: Van 1', autocomplete: 'off' });
       wrap.append(h('form', {
         class: 'card', onsubmit: async function (ev) {
@@ -444,26 +557,27 @@
           var pl = RC.normPlate(vp.value), nm = vn.value.trim();
           if (pl.length < 3) { RC.setMsg(vm, 'Informe a placa (pelo menos 3 caracteres).', 'err'); return; }
           if (!nm) { RC.setMsg(vm, 'Informe o nome do veículo.', 'err'); return; }
-          var r = await sb.from('vehicles').insert({ plate: pl, name: nm });
+          var r = await sb.from('vehicles').insert({ plate: pl, name: nm, kind: vk.value });
           if (r.error) { RC.setMsg(vm, /duplicate|unique/i.test(r.error.message) ? 'Essa placa já está cadastrada.' : RC.errText(r.error), 'err'); return; }
           RC.toast('Veículo cadastrado'); renderVehicles();
         }
-      }, RC.lbl('newPlate', 'Placa', vp), RC.lbl('newName', 'Nome do veículo', vn), vm, h('button', { class: 'btn', type: 'submit' }, 'Cadastrar veículo')));
+      }, RC.lbl('newPlate', 'Placa', vp), RC.lbl('newName', 'Nome do veículo', vn), RC.lbl('newKind', 'Tipo (define a imagem na escala)', vk), vm, h('button', { class: 'btn', type: 'submit' }, 'Cadastrar veículo')));
       wrap.append(h('h2', null, 'Veículos cadastrados'));
       vehicles.forEach(function (v) {
         var m = RC.msgBox();
         var ep = h('input', { id: 'ep_' + v.id, class: 'input', type: 'text', maxlength: '7', value: v.plate, autocapitalize: 'characters', autocomplete: 'off' });
+        var ek = kindSelect('ek_' + v.id, v.kind);
         var en = h('input', { id: 'en_' + v.id, class: 'input', type: 'text', maxlength: '30', value: v.name, autocomplete: 'off' });
         wrap.append(h('details', { class: 'item' },
           h('summary', null, RC.plate(v.plate), h('span', null, v.name), h('span', { class: 'pill ' + (v.active ? 'free' : 'off') }, v.active ? 'Ativo' : 'Inativo')),
           h('div', { class: 'body' },
-            RC.lbl('ep_' + v.id, 'Placa', ep), RC.lbl('en_' + v.id, 'Nome', en), m,
+            RC.lbl('ep_' + v.id, 'Placa', ep), RC.lbl('en_' + v.id, 'Nome', en), RC.lbl('ek_' + v.id, 'Tipo', ek), m,
             h('div', { class: 'acts' },
               h('button', {
                 class: 'btn small', type: 'button', onclick: async function () {
                   var pl = RC.normPlate(ep.value), nm = en.value.trim();
                   if (pl.length < 3 || !nm) { RC.setMsg(m, 'Informe a placa e o nome.', 'err'); return; }
-                  var r = await sb.from('vehicles').update({ plate: pl, name: nm }).eq('id', v.id);
+                  var r = await sb.from('vehicles').update({ plate: pl, name: nm, kind: ek.value }).eq('id', v.id);
                   if (r.error) { RC.setMsg(m, /duplicate|unique/i.test(r.error.message) ? 'Essa placa já está cadastrada.' : RC.errText(r.error), 'err'); return; }
                   RC.toast('Veículo atualizado'); renderVehicles();
                 }

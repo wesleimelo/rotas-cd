@@ -178,3 +178,26 @@ A rota aparece normalmente no Histórico, no Resumo e na planilha, com a marca "
 Regras: a data não pode estar no futuro nem ter mais de 62 dias, o fechamento não pode ser antes do início, e o km final não pode ser menor que o inicial.
 
 **Atualização:** rode `supabase/atualizacao-lancamento-manual.sql` no SQL Editor do Supabase (uma vez) e depois troque os arquivos do site.
+
+## Planilha do Google atualizada sozinha
+
+1. Supabase > SQL Editor: rode `supabase/atualizacao-planilha-google.sql`. No final ele mostra a `senha_da_planilha`; copie.
+2. Abra a planilha no Google Planilhas (precisa ser Planilhas Google, não .xlsx). Extensões > Apps Script. Apague o que houver e cole o conteúdo de `google-planilha/Codigo.gs`. Salve.
+3. Engrenagem (Configurações do projeto) > Propriedades do script > adicione: `SUPABASE_URL` (a mesma do config.js), `SUPABASE_KEY` (a chave anon do config.js) e `SHEET_TOKEN` (a senha da etapa 1).
+4. Volte à planilha, recarregue a página: aparece o menu **Rotas do CD**. Use "Atualizar agora" (aceite as permissões do Google na primeira vez) e depois "Ligar atualização automática (10 min)".
+
+O script só preenche células vazias, procura a coluna de cada veículo pela placa no cabeçalho e ignora abas de meses futuros.
+
+## Escala de rotas
+
+Aba **Escala** na coordenação: escolha a semana (‹ ›) e, em cada dia (segunda a sábado), toque em "+ Adicionar rota neste dia". Informe o destino ou turno (ex.: ALMOX MANHÃ, ALMOX TARDE, CAF), o horário (opcional, ex.: 11H), o veículo e, se quiser, o motorista. Use "Copiar a semana anterior" para começar de uma semana pronta e ajuste só o que mudou. O × apaga uma rota da escala.
+
+Os motoristas veem a aba **Escala** no app, com hoje e os próximos 14 dias. As rotas que são deles aparecem destacadas, com "Você".
+
+**Atualização:** rode `supabase/atualizacao-escala.sql` no SQL Editor (uma vez). Ele cria a tabela da escala e também completa as placas cadastradas só com 3 letras (SEY4A76, UBG2B99, UCI3F14). Depois troque os arquivos do site.
+
+### Imagem do veículo e aceite da rota
+
+- Na aba **Veículos** da coordenação, cada veículo tem um **Tipo** (Van, Caminhão ou Moto). Ele define a imagem na escala. Para usar as imagens do seu Canva, troque os arquivos `img/van.svg`, `img/caminhao.svg` e `img/moto.svg` (mesmo nome e formato SVG, ou ajuste o nome no código).
+- Na aba **Escala** do motorista, as rotas dele têm o botão **Aceitar rota**. Na tela de Veículos também aparece um aviso quando há rota de hoje para aceitar.
+- No **Painel** da coordenação aparece "Escala de hoje · X de Y aceitas", com "✔ Aceita HH:MM" ou "Aguardando aceite" em cada rota que tem motorista definido.
