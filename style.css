@@ -168,3 +168,10 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .esc-add .body{display:flex;flex-direction:column;gap:12px;padding-bottom:14px}
 .weeknav{display:flex;gap:8px;align-items:center;justify-content:space-between}
 .weeknav b{font-family:var(--f-display);font-size:1.3rem;text-align:center;flex:1}
+
+.esc-erow{display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-top:1px solid rgba(255,255,255,.35)}
+.esc-line{display:flex;gap:10px;align-items:center}
+.esc-line .esc-label{flex:none;width:132px;text-align:center}
+.esc-sel{min-height:48px;flex:1;min-width:0;color:var(--ink)}
+.esc-plate.sm{font-size:1.4rem;margin-left:auto}
+.esc-warn{background:#FFF1CC;color:#7A4B00;font-weight:600;font-size:.85rem;padding:3px 10px;border-radius:8px}

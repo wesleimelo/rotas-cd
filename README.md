@@ -190,9 +190,9 @@ O script só preenche células vazias, procura a coluna de cada veículo pela pl
 
 ## Escala de rotas
 
-Aba **Escala** na coordenação: escolha a semana (‹ ›) e, em cada dia (segunda a sábado), toque em "+ Adicionar rota neste dia". Informe o destino ou turno (ex.: ALMOX MANHÃ, ALMOX TARDE, CAF), o horário (opcional, ex.: 11H), o veículo e, se quiser, o motorista. Use "Copiar a semana anterior" para começar de uma semana pronta e ajuste só o que mudou. O × apaga uma rota da escala.
+Aba **Escala** na coordenação: escolha a semana (‹ ›). Cada dia (segunda a sábado) já vem com os blocos prontos: **CAF 11H, CAF 15H, CAF 17H, REGIÃO, ALMOX MANHÃ e ALMOX TARDE**. Em cada bloco, escolha o veículo (ou "Sem veículo" para tirar). O motorista é preenchido sozinho: é o que está vinculado àquele veículo na aba **Motoristas**. Se o veículo não tiver motorista vinculado, aparece um aviso. Para um destino fora dos blocos, use "+ Outro destino". "Copiar a semana anterior" começa de uma semana pronta, e você ajusta só o que mudou.
 
-Os motoristas veem a aba **Escala** no app, com hoje e os próximos 14 dias. As rotas que são deles aparecem destacadas, com "Você".
+Os motoristas veem a aba **Escala** no app, com hoje e os próximos 14 dias. As rotas que são deles aparecem destacadas, com "Sua rota".
 
 **Atualização:** rode `supabase/atualizacao-escala.sql` no SQL Editor (uma vez). Ele cria a tabela da escala e também completa as placas cadastradas só com 3 letras (SEY4A76, UBG2B99, UCI3F14). Depois troque os arquivos do site.
 

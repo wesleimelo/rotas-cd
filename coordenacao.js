@@ -164,7 +164,7 @@
 
   /* ---------- escala ---------- */
   var schedWeek = null;
-  var LABELS = ['ALMOX MANHÃ', 'ALMOX TARDE', 'CAF'];
+  var PRESETS = ['CAF 11H', 'CAF 15H', 'CAF 17H', 'REGIÃO', 'ALMOX MANHÃ', 'ALMOX TARDE'];
   async function renderSchedule() {
     if (view.tab !== 'e') return;
     if (!schedWeek) schedWeek = RC.weekMonday(RC.todayISO());
@@ -181,9 +181,6 @@
       var entries = res[0].data || [], vs = res[1].data || [];
       var drivers = people.filter(function (x) { return x.role === 'driver' && x.active; });
       var msg = RC.msgBox();
-      var dl = h('datalist', { id: 'escLabels' });
-      var seen = {};
-      LABELS.concat(entries.map(function (e) { return e.label; })).forEach(function (l) { if (!seen[l]) { seen[l] = 1; dl.append(h('option', { value: l })); } });
 
       var nav = h('div', { class: 'weeknav' },
         h('button', { class: 'btn ghost', type: 'button', 'aria-label': 'Semana anterior', onclick: function () { schedWeek = RC.addDays(schedWeek, -7); renderSchedule(); } }, '‹'),
@@ -200,7 +197,7 @@
             if (!(pr.data || []).length) { RC.setMsg(msg, 'A semana anterior não tem rotas para copiar.', 'warn'); copyBtn.disabled = false; return; }
             var rows = pr.data.map(function (e) {
               var v = vs.filter(function (x) { return x.id === e.vehicle_id; })[0];
-              var d = drivers.filter(function (x) { return x.id === e.driver_id; })[0];
+              var d = v ? driverOf(v.id) : null;
               return { day: RC.addDays(e.day, 7), label: e.label, time_text: e.time_text, vehicle_id: v ? v.id : null, plate: v ? v.plate : e.plate, kind: v ? v.kind : e.kind, driver_id: d ? d.id : null, driver_name: d ? d.full_name : null, sort: e.sort };
             });
             var ins = await sb.from('schedule').insert(rows);
@@ -210,52 +207,93 @@
         }
       }, 'Copiar a semana anterior');
 
-      var wrap = h('div', { class: 'list' }, nav, h('div', null, copyBtn), msg, dl,
-        h('div', { class: 'hint' }, 'Monte a escala de cada dia. Os motoristas veem na aba Escala do app. Dica: use "Copiar a semana anterior" e ajuste só o que mudou.'));
+      var wrap = h('div', { class: 'list' }, nav, h('div', null, copyBtn), msg,
+        h('div', { class: 'hint' }, 'Escolha o veículo de cada bloco. O motorista é preenchido sozinho (o que está vinculado ao veículo na aba Motoristas). Use "Copiar a semana anterior" e ajuste só o que mudou.'));
       for (var i = 0; i < 6; i++) wrap.append(dayBlock(RC.addDays(from, i)));
       $('view').replaceChildren(wrap);
       $('view').style.display = ''; 
 
+      function keyOf(e) { return e.label + (e.time_text ? ' ' + e.time_text : ''); }
+      function driverOf(vid) {
+        return drivers.filter(function (x) { return x.vehicle_id === vid; })[0] || null;
+      }
+      function rowFields(iso, label, v, order) {
+        var d = driverOf(v.id);
+        return { day: iso, label: label, time_text: null, vehicle_id: v.id, plate: v.plate, kind: v.kind, driver_id: d ? d.id : null, driver_name: d ? d.full_name : null, sort: order, accepted_at: null };
+      }
+      async function afterChange(r, okMsg) {
+        if (r.error) { RC.setMsg(msg, RC.errText(r.error), 'err'); return; }
+        var y = window.scrollY;
+        RC.toast(okMsg);
+        await renderSchedule();
+        window.scrollTo(0, y);
+      }
+      function statusLine(e) {
+        if (!e) return null;
+        if (!e.driver_id) return h('span', { class: 'esc-warn' }, '⚠ Nenhum motorista vinculado a este veículo (aba Motoristas)');
+        return h('span', { class: 'esc-drv' }, e.driver_name + (e.accepted_at ? ' · ✔ aceita ' + RC.fmtTime(e.accepted_at) : ' · aguardando aceite'));
+      }
+      function vehSelect(id, cur) {
+        var sel = h('select', { id: id, class: 'input esc-sel' }, h('option', { value: '' }, 'Sem veículo'));
+        vs.forEach(function (v) { sel.append(h('option', { value: v.id }, v.plate + ' · ' + (RC.kindName[v.kind] || 'Van'))); });
+        sel.value = cur || '';
+        return sel;
+      }
       function dayBlock(iso) {
         var dayEntries = entries.filter(function (e) { return e.day === iso; });
-        var card = RC.scheduleDay(iso, dayEntries, {
-          showDriver: true,
-          onRemove: async function (e) {
-            var r = await sb.from('schedule').delete().eq('id', e.id);
-            if (r.error) { RC.toast(RC.errText(r.error)); return; }
-            RC.toast('Rota removida da escala'); renderSchedule();
-          }
-        });
+        var box = h('div', { class: 'esc-day' }, h('div', { class: 'esc-head' }, RC.dayLong(iso) + (iso === RC.todayISO() ? ' · hoje' : '')));
         var id = iso.replace(/-/g, '');
+        PRESETS.forEach(function (label, i) {
+          var cur = dayEntries.filter(function (e) { return keyOf(e) === label; })[0];
+          var sel = vehSelect('pv_' + id + '_' + i, cur && cur.vehicle_id);
+          sel.addEventListener('change', async function () {
+            sel.disabled = true;
+            var v = vs.filter(function (x) { return x.id === sel.value; })[0];
+            if (!v) { if (cur) await afterChange(await sb.from('schedule').delete().eq('id', cur.id), 'Rota removida da escala'); else sel.disabled = false; return; }
+            var row = rowFields(iso, label, v, i);
+            await afterChange(cur ? await sb.from('schedule').update(row).eq('id', cur.id) : await sb.from('schedule').insert(row), 'Escala salva');
+          });
+          box.append(h('div', { class: 'esc-erow' },
+            h('div', { class: 'esc-line' }, h('span', { class: 'esc-label ' + RC.labelClass(label) }, label), sel),
+            statusLine(cur)));
+        });
+        // rotas fora dos blocos prontos (ex.: digitadas antes)
+        dayEntries.filter(function (e) { return PRESETS.indexOf(keyOf(e)) < 0; }).forEach(function (e) {
+          box.append(h('div', { class: 'esc-erow' },
+            h('div', { class: 'esc-line' },
+              h('span', { class: 'esc-label ' + RC.labelClass(e.label) }, keyOf(e)),
+              h('span', { class: 'esc-plate sm' }, e.plate),
+              h('button', {
+                class: 'esc-x', type: 'button', 'aria-label': 'Apagar esta rota da escala', onclick: async function () {
+                  await afterChange(await sb.from('schedule').delete().eq('id', e.id), 'Rota removida da escala');
+                }
+              }, '×')),
+            statusLine(e)));
+        });
+        // outro destino (fora dos blocos prontos)
         var m = RC.msgBox();
-        var lab = h('input', { id: 'el_' + id, class: 'input', type: 'text', maxlength: '30', list: 'escLabels', placeholder: 'Ex.: ALMOX MANHÃ, CAF' });
-        var tm = h('input', { id: 'et_' + id, class: 'input', type: 'text', maxlength: '12', placeholder: 'Ex.: 11H (opcional)' });
-        var vsel = h('select', { id: 'ev_' + id, class: 'input' }, h('option', { value: '' }, 'Escolha o veículo'));
-        vs.forEach(function (v) { vsel.append(h('option', { value: v.id }, v.plate + ' · ' + v.name)); });
-        var dsel = h('select', { id: 'ed_' + id, class: 'input' }, h('option', { value: '' }, 'Sem motorista definido'));
-        drivers.forEach(function (d) { dsel.append(h('option', { value: d.id }, d.full_name)); });
-        var add = h('button', { class: 'btn small', type: 'button' }, 'Adicionar à escala');
+        var lab = h('input', { id: 'el_' + id, class: 'input', type: 'text', maxlength: '30', placeholder: 'Ex.: ENTREGAS' });
+        var tm = h('input', { id: 'et_' + id, class: 'input', type: 'text', maxlength: '12', placeholder: 'Ex.: 9H (opcional)' });
+        var vsel = vehSelect('ev_' + id, '');
+        var add = h('button', { class: 'btn small', type: 'button' }, 'Adicionar');
         add.addEventListener('click', async function () {
           var label = lab.value.trim().toUpperCase();
-          if (!label) { RC.setMsg(m, 'Escreva o destino ou turno (ex.: CAF).', 'err'); return; }
           var v = vs.filter(function (x) { return x.id === vsel.value; })[0];
+          if (!label) { RC.setMsg(m, 'Escreva o destino ou turno.', 'err'); return; }
           if (!v) { RC.setMsg(m, 'Escolha o veículo.', 'err'); return; }
-          var d = drivers.filter(function (x) { return x.id === dsel.value; })[0];
           add.disabled = true;
-          var r = await sb.from('schedule').insert({ day: iso, label: label, time_text: tm.value.trim().toUpperCase() || null, vehicle_id: v.id, plate: v.plate, kind: v.kind, driver_id: d ? d.id : null, driver_name: d ? d.full_name : null, sort: dayEntries.length });
+          var row = rowFields(iso, label, v, 50 + dayEntries.length);
+          row.time_text = tm.value.trim().toUpperCase() || null;
+          var r = await sb.from('schedule').insert(row);
           if (r.error) { RC.setMsg(m, RC.errText(r.error), 'err'); add.disabled = false; return; }
-          RC.toast('Adicionado à escala'); renderSchedule();
+          afterChange(r, 'Adicionado à escala');
         });
-        card.append(h('details', { class: 'esc-add' },
-          h('summary', null, '+ Adicionar rota neste dia'),
+        box.append(h('details', { class: 'esc-add' },
+          h('summary', null, '+ Outro destino (fora dos blocos)'),
           h('div', { class: 'body' },
-            RC.lbl('el_' + id, 'Destino ou turno', lab),
-            RC.lbl('et_' + id, 'Horário', tm),
-            RC.lbl('ev_' + id, 'Veículo', vsel),
-            RC.lbl('ed_' + id, 'Motorista', dsel),
-            m, h('div', { class: 'acts' }, add))
-        ));
-        return card;
+            RC.lbl('el_' + id, 'Destino ou turno', lab), RC.lbl('et_' + id, 'Horário', tm), RC.lbl('ev_' + id, 'Veículo', vsel),
+            m, h('div', { class: 'acts' }, add))));
+        return box;
       }
     } catch (e) { fail(e); }
   }
