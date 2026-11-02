@@ -204,7 +204,7 @@ Os motoristas veem a aba **Escala** no app, com hoje e os próximos 14 dias. As 
 
 ## Responsável do CD (acesso só de consulta)
 
-Na aba **Motoristas** da coordenação, em "Novo acesso", escolha o tipo **Responsável do CD (só consulta)**. Ele entra no mesmo endereço da coordenação e vê apenas **Painel**, **Histórico** (rotas, km, horários, fotos e localização) e **Resumo**. Não consegue lançar, corrigir, excluir nem cadastrar nada, e não entra no app dos motoristas.
+Na aba **Motoristas** da coordenação, em "Novo acesso", escolha o tipo **Responsável do CD (só consulta)**. Ele entra no mesmo endereço da coordenação e vê apenas **Painel**, **Escala** (só consulta, com o aceite dos motoristas) e **Histórico** (rotas, km, horários, fotos e localização). Não vê a aba Resumo, Motoristas nem Veículos. Não consegue lançar, corrigir, excluir nem cadastrar nada, e não entra no app dos motoristas.
 
 **Atualização:** rode `supabase/atualizacao-fiscal-status-resumo.sql` no SQL Editor e atualize também a função `manage-users` (Edge Functions > manage-users > Edit > cole o `supabase/functions/manage-users/index.ts` > Deploy).
 

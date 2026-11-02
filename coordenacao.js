@@ -18,8 +18,8 @@
   }
   function start() {
     $('who').hidden = false; $('tabs').hidden = false;
-    // Responsável do CD: só consulta (Painel, Histórico e Resumo).
-    TABS.forEach(function (k) { $('tab' + k).hidden = readOnly() && ['E', 'M', 'V'].indexOf(k) >= 0; });
+    // Responsável do CD: só consulta (Painel, Escala e Histórico).
+    TABS.forEach(function (k) { $('tab' + k).hidden = readOnly() && ['M', 'V', 'R'].indexOf(k) >= 0; });
     $('ttl').textContent = readOnly() ? 'Acompanhamento' : 'Coordenação';
     $('who').replaceChildren(h('div', { class: 'whoin' },
       h('div', { class: 'nm' }, h('span', { class: 'lbl' }, readOnly() ? 'Responsável do CD' : 'Coordenação'), h('strong', null, profile.full_name)),
@@ -32,7 +32,7 @@
   }
   function readOnly() { return !!profile && profile.role === 'fiscal'; }
   function setTab(t) {
-    if (readOnly() && ['e', 'm', 'v'].indexOf(t) >= 0) t = 'p';
+    if (readOnly() && ['m', 'v', 'r'].indexOf(t) >= 0) t = 'p';
     view.tab = t;
     TABS.forEach(function (k) { $('tab' + k).setAttribute('aria-current', k.toLowerCase() === t ? 'page' : 'false'); });
     RC.banner('');
@@ -227,8 +227,8 @@
         }
       }, 'Copiar a semana anterior');
 
-      var wrap = h('div', { class: 'list' }, nav, h('div', null, copyBtn), msg,
-        h('div', { class: 'hint' }, 'Escolha o veículo de cada bloco. O motorista é preenchido sozinho (o que está vinculado ao veículo na aba Motoristas). Use "Copiar a semana anterior" e ajuste só o que mudou.'));
+      var wrap = h('div', { class: 'list' }, nav, readOnly() ? null : h('div', null, copyBtn), msg,
+        h('div', { class: 'hint' }, (readOnly() ? 'Escala da semana (somente consulta). “Aguardando aceite” muda para “aceita” quando o motorista confirma a rota.' : 'Escolha o veículo de cada bloco. O motorista é preenchido sozinho (o que está vinculado ao veículo na aba Motoristas). Use "Copiar a semana anterior" e ajuste só o que mudou.')));
       for (var i = 0; i < 6; i++) wrap.append(dayBlock(RC.addDays(from, i)));
       $('view').replaceChildren(wrap);
       $('view').style.display = ''; 
@@ -261,6 +261,7 @@
       }
       function dayBlock(iso) {
         var dayEntries = entries.filter(function (e) { return e.day === iso; });
+        if (readOnly()) return RC.scheduleDay(iso, dayEntries, { showDriver: true });
         var box = h('div', { class: 'esc-day' }, h('div', { class: 'esc-head' }, RC.dayLong(iso) + (iso === RC.todayISO() ? ' · hoje' : '')));
         var id = iso.replace(/-/g, '');
         PRESETS.forEach(function (label, i) {
