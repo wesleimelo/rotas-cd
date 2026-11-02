@@ -107,8 +107,8 @@
   // Situação do veículo no quadro: no CD, em atendimento (fora) ou parado no CD durante a rota.
   RC.routeState = function (v) {
     if (!v.route_id) return { label: 'No CD', cls: 'free', away: false, available: true };
-    if (v.field_status === 'cd') return { label: 'Parado no CD', cls: 'hold', away: false, available: true };
-    return { label: 'Em atendimento', cls: 'run', away: true, available: false };
+    if (v.field_status === 'atendimento') return { label: 'Em atendimento', cls: 'run', away: true, available: false };
+    return { label: 'Parado no CD', cls: 'hold', away: false, available: true };
   };
   RC.kindName = { van: 'Van', caminhao: 'Caminhão', moto: 'Moto' };
   RC.scheduleDay = function (iso, entries, opts) {

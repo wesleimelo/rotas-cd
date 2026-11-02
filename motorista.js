@@ -122,7 +122,7 @@
     var box = h('div', { class: 'statusbox' });
     var msg = RC.msgBox();
     function paint() {
-      var cur = v.field_status === 'cd' ? 'cd' : 'atendimento';
+      var cur = v.field_status === 'atendimento' ? 'atendimento' : 'cd';
       box.replaceChildren(
         h('span', { class: 'lbl' }, 'Situação agora'),
         h('div', { class: 'seg' },
@@ -131,7 +131,7 @@
         msg);
     }
     async function set(st) {
-      if ((v.field_status || 'atendimento') === st) return;
+      if ((v.field_status === 'atendimento' ? 'atendimento' : 'cd') === st) return;
       var r = await RC.sb.rpc('set_route_status', { p_route: v.route_id, p_status: st });
       if (r.error) { RC.setMsg(msg, RC.errText(r.error), 'err'); return; }
       v.field_status = st; v.status_at = r.data && r.data.status_at;

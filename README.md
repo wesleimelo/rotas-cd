@@ -210,7 +210,7 @@ Na aba **Motoristas** da coordenação, em "Novo acesso", escolha o tipo **Respo
 
 ## Situação durante a rota: parado no CD ou em atendimento
 
-Com a rota aberta, o motorista vê dois botões: **Em atendimento (fora do CD)** e **Parado no CD**. O Painel (coordenação e responsável do CD) mostra a situação de cada veículo e "Em atendimento" / "Disponíveis no CD" no topo. Toda rota nova começa como "Em atendimento".
+Com a rota aberta, o motorista vê dois botões: **Parado no CD** (já marcado ao iniciar) e **Em atendimento (fora do CD)**. O Painel (coordenação e responsável do CD) mostra a situação de cada veículo e "Em atendimento" / "Disponíveis no CD" no topo. Toda rota nova começa como **"Parado no CD"**; o motorista toca em "Em atendimento" quando sair para atender e volta para "Parado no CD" quando estiver de volta. Quando o motorista finaliza a rota, o cartão do veículo no Painel mostra **"Rota finalizada"**, com o horário, o motorista e os km rodados no dia.
 
 ## Resumo para os motoristas
 

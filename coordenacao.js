@@ -145,8 +145,19 @@
       board.forEach(function (v) {
         var open = !!v.route_id;
         var st = RC.routeState(v);
-        var meta = open ? 'Saiu ' + RC.fmtTime(v.start_at) + ' · ' + v.driver_name + ' · km ' + RC.fmtKm(v.start_km) + (v.field_status === 'cd' && v.status_at ? ' · no CD desde ' + RC.fmtTime(v.status_at) : (v.status_at ? ' · em atendimento desde ' + RC.fmtTime(v.status_at) : ''))
+        var since = RC.fmtTime(v.status_at || v.start_at);
+        var meta = open ? 'Saiu ' + RC.fmtTime(v.start_at) + ' · ' + v.driver_name + ' · km ' + RC.fmtKm(v.start_km) + (v.field_status === 'atendimento' ? ' · em atendimento desde ' + since : ' · no CD desde ' + since)
           : (v.last_km != null ? 'Último km: ' + RC.fmtKm(v.last_km) : 'Sem rotas registradas');
+        // Rota(s) finalizada(s) hoje neste veículo: mostra quem encerrou, quando e quantos km.
+        var doneToday = !open ? rows.filter(function (x) {
+          return x.vehicle_id === v.id && x.status === 'closed' && x.end_at && new Date(x.end_at).toLocaleDateString('sv-SE', { timeZone: RC.TZ }) === today;
+        }).sort(function (a, b) { return new Date(a.end_at) - new Date(b.end_at); }) : [];
+        if (doneToday.length) {
+          var last = doneToday[doneToday.length - 1];
+          var kmDay = doneToday.reduce(function (a, x) { return a + (x.km_driven || 0); }, 0);
+          st = { label: 'Rota finalizada', cls: 'free' };
+          meta = 'Finalizou às ' + RC.fmtTime(last.end_at) + ' · ' + last.driver_name + ' · rodou ' + RC.fmtKm(kmDay) + ' km hoje' + (doneToday.length > 1 ? ' (' + doneToday.length + ' rotas)' : '') + ' · km final ' + RC.fmtKm(last.end_km);
+        }
         grid.append(h('div', { class: 'vcard' },
           h('div', { class: 'row' }, RC.plate(v.plate), h('span', { class: 'pill ' + st.cls }, st.label)),
           h('div', { class: 'vname' }, v.name),
