@@ -14,12 +14,15 @@
   function showLogin() {
     clearInterval(pollT);
     $('who').hidden = true; $('tabs').hidden = true; RC.banner('');
-    RC.loginView($('view'), { role: 'coord', onDone: function (p) { profile = p; start(); } });
+    RC.loginView($('view'), { roles: ['coord', 'fiscal'], deny: 'Esta área é só para a coordenação e o responsável do CD.', onDone: function (p) { profile = p; start(); } });
   }
   function start() {
     $('who').hidden = false; $('tabs').hidden = false;
+    // Responsável do CD: só consulta (Painel, Histórico e Resumo).
+    TABS.forEach(function (k) { $('tab' + k).hidden = readOnly() && ['E', 'M', 'V'].indexOf(k) >= 0; });
+    $('ttl').textContent = readOnly() ? 'Acompanhamento' : 'Coordenação';
     $('who').replaceChildren(h('div', { class: 'whoin' },
-      h('div', { class: 'nm' }, h('span', { class: 'lbl' }, 'Coordenação'), h('strong', null, profile.full_name)),
+      h('div', { class: 'nm' }, h('span', { class: 'lbl' }, readOnly() ? 'Responsável do CD' : 'Coordenação'), h('strong', null, profile.full_name)),
       h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.signOut(); } }, 'Sair')
     ));
     flt = { month: RC.lastMonths(1)[0], vehicle: 'all', driver: 'all' };
@@ -27,7 +30,9 @@
     clearInterval(pollT);
     pollT = setInterval(function () { if (!document.hidden && profile && view.tab === 'p' && !$('view').querySelector('details[open]')) renderPanel(); }, 30000);
   }
+  function readOnly() { return !!profile && profile.role === 'fiscal'; }
   function setTab(t) {
+    if (readOnly() && ['e', 'm', 'v'].indexOf(t) >= 0) t = 'p';
     view.tab = t;
     TABS.forEach(function (k) { $('tab' + k).setAttribute('aria-current', k.toLowerCase() === t ? 'page' : 'false'); });
     RC.banner('');
@@ -72,6 +77,7 @@
     return d.toISOString().slice(0, 16);
   }
   function manualForm(v) {
+    if (readOnly()) return null;
     var open = !!v.route_id;
     var id = v.vehicle_id || v.id;
     var m = RC.msgBox();
@@ -133,14 +139,16 @@
       var acceptedN = withDriver.filter(function (e) { return e.accepted_at; }).length;
       var today = new Date().toLocaleDateString('sv-SE', { timeZone: RC.TZ });
       var todayRows = rows.filter(function (x) { return new Date(x.start_at).toLocaleDateString('sv-SE', { timeZone: RC.TZ }) === today; });
-      var running = board.filter(function (v) { return v.route_id; }).length;
+      var away = board.filter(function (v) { return RC.routeState(v).away; }).length;
+      var available = board.length - away;
       var grid = h('div', { class: 'board' });
       board.forEach(function (v) {
         var open = !!v.route_id;
-        var meta = open ? 'Saiu ' + RC.fmtTime(v.start_at) + ' · ' + v.driver_name + ' · km ' + RC.fmtKm(v.start_km)
+        var st = RC.routeState(v);
+        var meta = open ? 'Saiu ' + RC.fmtTime(v.start_at) + ' · ' + v.driver_name + ' · km ' + RC.fmtKm(v.start_km) + (v.field_status === 'cd' && v.status_at ? ' · no CD desde ' + RC.fmtTime(v.status_at) : (v.status_at ? ' · em atendimento desde ' + RC.fmtTime(v.status_at) : ''))
           : (v.last_km != null ? 'Último km: ' + RC.fmtKm(v.last_km) : 'Sem rotas registradas');
         grid.append(h('div', { class: 'vcard' },
-          h('div', { class: 'row' }, RC.plate(v.plate), h('span', { class: 'pill ' + (open ? 'run' : 'free') }, open ? 'Em rota' : 'No CD')),
+          h('div', { class: 'row' }, RC.plate(v.plate), h('span', { class: 'pill ' + st.cls }, st.label)),
           h('div', { class: 'vname' }, v.name),
           h('div', { class: 'vmeta' }, meta),
           open ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { RC.showPhoto(v.start_photo, 'Odômetro na saída · ' + v.plate); } }, 'Foto da saída') : null,
@@ -149,7 +157,8 @@
       });
       $('view').replaceChildren(h('div', { class: 'list' },
         h('div', { class: 'stats' },
-          h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Em rota agora'), h('b', null, String(running))),
+          h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Em atendimento'), h('b', null, String(away))),
+          h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Disponíveis no CD'), h('b', null, String(available))),
           h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Rotas hoje'), h('b', null, String(todayRows.length))),
           h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Km no mês'), h('b', null, RC.fmtKm(sum(rows))))
         ),
@@ -398,7 +407,7 @@
         )));
     }
     showDel();
-    var details = h('details', { class: 'item' },
+    var details = readOnly() ? null : h('details', { class: 'item' },
       h('summary', null, 'Corrigir km ou observação'),
       h('div', { class: 'body' },
         RC.lbl('sk_' + x.id, 'Km inicial', sk),
@@ -502,28 +511,30 @@
         return sel;
       }
       var wrap = h('div', { class: 'list' });
-      wrap.append(h('h2', null, 'Novo motorista'));
+      wrap.append(h('h2', null, 'Novo acesso'));
       var fm = RC.msgBox();
       var fn = h('input', { id: 'newFull', class: 'input', type: 'text', maxlength: '60', placeholder: 'Ex.: João Pedro da Silva', autocomplete: 'off' });
       var fu = h('input', { id: 'newUser', class: 'input', type: 'text', maxlength: '30', placeholder: 'joao.pedro', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false' });
       var fp = h('input', { id: 'newPass', class: 'input', type: 'text', maxlength: '72', placeholder: 'Mínimo 6 caracteres', autocomplete: 'off' });
       var fv = vehicleSelect('newVeh', '');
+      var fr = h('select', { id: 'newRole', class: 'input' }, h('option', { value: 'driver' }, 'Motorista'), h('option', { value: 'fiscal' }, 'Responsável do CD (só consulta)'));
       var fb = h('button', { class: 'btn', type: 'submit' }, 'Cadastrar motorista');
       wrap.append(h('form', {
         class: 'card', onsubmit: async function (ev) {
           ev.preventDefault();
           fb.disabled = true; RC.setMsg(fm, 'Cadastrando…', 'warn');
           try {
-            var made = await manage({ action: 'create_driver', full_name: fn.value, username: fu.value, password: fp.value });
-            if (fv.value && made && made.id) {
+            var made = await manage({ action: 'create_driver', full_name: fn.value, username: fu.value, password: fp.value, role: fr.value });
+            if (fr.value === 'driver' && fv.value && made && made.id) {
               var av = await sb.rpc('assign_vehicle', { p_user: made.id, p_vehicle: fv.value });
               if (av.error) { RC.toast('Motorista cadastrado, mas o veículo não foi definido. Defina na lista abaixo.'); renderPeople(); return; }
             }
-            RC.toast('Motorista cadastrado'); renderPeople();
+            RC.toast(fr.value === 'fiscal' ? 'Acesso cadastrado' : 'Motorista cadastrado'); renderPeople();
           } catch (e) { fb.disabled = false; RC.setMsg(fm, RC.errText(e), 'err'); }
         }
       },
         h('div', { class: 'hint' }, 'O motorista entra com o usuário e a senha abaixo. Anote a senha para entregar a ele: ela não pode ser consultada depois, só redefinida.'),
+        RC.lbl('newRole', 'Tipo de acesso', fr),
         RC.lbl('newFull', 'Nome completo', fn),
         h('div', { class: 'two' }, RC.lbl('newUser', 'Usuário', fu), RC.lbl('newPass', 'Senha', fp)),
         RC.lbl('newVeh', 'Veículo do motorista', fv),
@@ -534,13 +545,14 @@
         var m = RC.msgBox();
         var np = h('input', { id: 'pw_' + p.id, class: 'input', type: 'text', maxlength: '72', placeholder: 'Nova senha (mínimo 6 caracteres)', autocomplete: 'off' });
         var me = p.id === profile.id;
-        var vs = p.role === 'coord' ? null : vehicleSelect('veh_' + p.id, p.vehicle_id);
+        var noVeh = p.role === 'coord' || p.role === 'fiscal';
+        var vs = noVeh ? null : vehicleSelect('veh_' + p.id, p.vehicle_id);
         wrap.append(h('details', { class: 'item' },
           h('summary', null, h('span', null, p.full_name), h('span', { class: 'hint' }, '@' + p.username),
-            p.role === 'coord' ? h('span', { class: 'pill free' }, 'Coordenação') : h('span', { class: 'hint' }, p.vehicle_id && vname[p.vehicle_id] ? vname[p.vehicle_id] : 'Todos os veículos'),
+            p.role === 'coord' ? h('span', { class: 'pill free' }, 'Coordenação') : p.role === 'fiscal' ? h('span', { class: 'pill hold' }, 'Responsável do CD') : h('span', { class: 'hint' }, p.vehicle_id && vname[p.vehicle_id] ? vname[p.vehicle_id] : 'Todos os veículos'),
             h('span', { class: 'pill ' + (p.active ? 'free' : 'off') }, p.active ? 'Ativo' : 'Inativo')),
           h('div', { class: 'body' },
-            p.role === 'coord' ? null : [
+            noVeh ? null : [
               RC.lbl('veh_' + p.id, 'Veículo do motorista', vs),
               h('div', { class: 'acts' }, h('button', {
                 class: 'btn small', type: 'button', onclick: async function () {
@@ -639,7 +651,7 @@
     if (!RC.configured) { RC.showConfigError($('view')); return; }
     sb.auth.onAuthStateChange(function (ev) { if (ev === 'SIGNED_OUT' && profile) { profile = null; showLogin(); } });
     var p = await RC.loadProfile();
-    if (p && p.active && p.role === 'coord') { profile = p; start(); return; }
+    if (p && p.active && (p.role === 'coord' || p.role === 'fiscal')) { profile = p; start(); return; }
     if (p) await RC.signOut();
     showLogin();
   }

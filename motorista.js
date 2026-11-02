@@ -16,7 +16,7 @@
   function showLogin() {
     clearInterval(pollT);
     $('who').hidden = true; $('tabs').hidden = true; RC.banner('');
-    RC.loginView($('view'), { onDone: function (p) { profile = p; start(); } });
+    RC.loginView($('view'), { roles: ['driver', 'coord'], deny: 'Esta área é só para motoristas. Use o endereço da coordenação.', onDone: function (p) { profile = p; start(); } });
   }
 
   function start() {
@@ -35,7 +35,8 @@
   function setTab(t) {
     view.tab = t; view.vehicleId = null; view.sig = '';
     resetDraft();
-    if (t === 'm') renderMine(); else if (t === 'e') renderSchedule(); else loadBoard(true);
+    ['V', 'E', 'R', 'M'].forEach(function (k) { $('tab' + k).setAttribute('aria-current', k.toLowerCase() === t ? 'page' : 'false'); });
+    if (t === 'm') renderMine(); else if (t === 'e') renderSchedule(); else if (t === 'r') renderFleetSummary(); else loadBoard(true);
   }
   function openVehicle(id) { view.vehicleId = id; view.sig = ''; resetDraft(); render(true); window.scrollTo(0, 0); }
 
@@ -78,15 +79,16 @@
       box.append(h('div', { class: 'empty' }, 'Nenhum veículo disponível. Fale com a coordenação.'));
       return;
     }
-    var running = board.filter(function (v) { return v.route_id; }).length;
+    var away = board.filter(function (v) { return RC.routeState(v).away; }).length;
     var grid = h('div', { class: 'board' });
     board.forEach(function (v) {
       var open = !!v.route_id;
+      var st = RC.routeState(v);
       var meta = open
         ? 'Saiu ' + RC.fmtTime(v.start_at) + ' · ' + v.driver_name + ' · km ' + RC.fmtKm(v.start_km)
         : (v.last_km != null ? 'Último km: ' + RC.fmtKm(v.last_km) : 'Sem rotas registradas');
       grid.append(h('button', { class: 'vcard', type: 'button', onclick: function () { openVehicle(v.id); } },
-        h('div', { class: 'row' }, RC.plate(v.plate), h('span', { class: 'pill ' + (open ? 'run' : 'free') }, open ? 'Em rota' : 'No CD')),
+        h('div', { class: 'row' }, RC.plate(v.plate), h('span', { class: 'pill ' + st.cls }, st.label)),
         h('div', { class: 'vname' }, v.name),
         h('div', { class: 'vmeta' }, meta)
       ));
@@ -95,7 +97,7 @@
       pendingAccept ? h('div', { class: 'card' },
         h('strong', null, 'Você tem ' + pendingAccept + (pendingAccept === 1 ? ' rota' : ' rotas') + ' hoje para aceitar'),
         h('button', { class: 'btn', type: 'button', onclick: function () { setTab('e'); } }, 'Ver escala e aceitar')) : null,
-      h('div', { class: 'sum' }, h('span', null, running + ' em rota'), h('span', null, '·'), h('span', null, (board.length - running) + ' no CD')),
+      h('div', { class: 'sum' }, h('span', null, away + ' em atendimento'), h('span', null, '·'), h('span', null, (board.length - away) + ' no CD')),
       grid
     ));
   }
@@ -109,10 +111,37 @@
     box.append(h('div', { class: 'list' },
       h('button', { class: 'back', type: 'button', onclick: function () { setTab('v'); } }, '← Veículos'),
       h('section', { class: 'panel' },
-        h('div', { class: 'vhead' }, RC.plate(v.plate), h('div', { class: 'vname' }, v.name), h('span', { class: 'pill ' + (open ? 'run' : 'free') }, open ? 'Em rota' : 'No CD')),
+        h('div', { class: 'vhead' }, RC.plate(v.plate), h('div', { class: 'vname' }, v.name), h('span', { class: 'pill ' + RC.routeState(v).cls }, RC.routeState(v).label)),
+        open && canFinish(v) ? statusBlock(v) : null,
         open ? (canFinish(v) ? finishForm(v) : lockedInfo(v)) : startForm(v)
       )
     ));
+  }
+  // Botões de situação durante a rota: em atendimento (fora do CD) ou parado no CD.
+  function statusBlock(v) {
+    var box = h('div', { class: 'statusbox' });
+    var msg = RC.msgBox();
+    function paint() {
+      var cur = v.field_status === 'cd' ? 'cd' : 'atendimento';
+      box.replaceChildren(
+        h('span', { class: 'lbl' }, 'Situação agora'),
+        h('div', { class: 'seg' },
+          h('button', { class: 'segbtn', type: 'button', 'aria-pressed': String(cur === 'atendimento'), onclick: function () { set('atendimento'); } }, 'Em atendimento (fora do CD)'),
+          h('button', { class: 'segbtn', type: 'button', 'aria-pressed': String(cur === 'cd'), onclick: function () { set('cd'); } }, 'Parado no CD')),
+        msg);
+    }
+    async function set(st) {
+      if ((v.field_status || 'atendimento') === st) return;
+      var r = await RC.sb.rpc('set_route_status', { p_route: v.route_id, p_status: st });
+      if (r.error) { RC.setMsg(msg, RC.errText(r.error), 'err'); return; }
+      v.field_status = st; v.status_at = r.data && r.data.status_at;
+      RC.toast(st === 'cd' ? 'Marcado: parado no CD' : 'Marcado: em atendimento');
+      var pill = document.querySelector('.vhead .pill'), rs = RC.routeState(v);
+      if (pill) { pill.className = 'pill ' + rs.cls; pill.textContent = rs.label; }
+      paint();
+    }
+    paint();
+    return box;
   }
   // Só quem iniciou a rota (ou a coordenação) finaliza.
   function canFinish(v) { return v.driver_id === profile.id || profile.role === 'coord'; }
@@ -300,6 +329,47 @@
     box.replaceChildren(wrap);
   }
 
+  /* ---------- resumo da frota ---------- */
+  var sumMonth = null;
+  async function renderFleetSummary() {
+    $('tabV').setAttribute('aria-current', 'false');
+    var box = $('view');
+    if (!sumMonth) sumMonth = RC.lastMonths(1)[0];
+    box.replaceChildren(h('div', { class: 'empty' }, 'Carregando…'));
+    try {
+      var r = await RC.sb.rpc('fleet_summary', { p_month: sumMonth });
+      if (view.tab !== 'r') return;
+      if (r.error) throw r.error;
+      var rows = (r.data || []).map(function (x) { return { plate: x.plate, name: x.vname, n: x.n_routes, km: Number(x.total_km) }; });
+      var total = rows.reduce(function (a, x) { return a + x.km; }, 0);
+      var count = rows.reduce(function (a, x) { return a + x.n; }, 0);
+      var sel = h('select', { id: 'fMonth', class: 'input' });
+      RC.lastMonths(12).forEach(function (k) { sel.append(h('option', { value: k }, RC.monthLabel(k))); });
+      sel.value = sumMonth;
+      sel.addEventListener('change', function () { sumMonth = sel.value; renderFleetSummary(); });
+      var wrap = h('div', { class: 'list' });
+      wrap.append(h('div', { class: 'tools' }, RC.lbl('fMonth', 'Mês', sel)));
+      wrap.append(h('div', { class: 'stats' },
+        h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Km rodados'), h('b', null, RC.fmtKm(total))),
+        h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Rotas'), h('b', null, String(count))),
+        h('div', { class: 'stat' }, h('span', { class: 'lbl' }, 'Média por rota'), h('b', null, count ? RC.fmtKm(Math.round(total / count)) : '0'))));
+      if (!rows.length) wrap.append(h('div', { class: 'empty' }, 'Nenhuma rota finalizada neste mês.'));
+      else {
+        wrap.append(h('h2', null, 'Por veículo'));
+        var max = rows.reduce(function (a, x) { return Math.max(a, x.km); }, 1);
+        rows.forEach(function (x) {
+          var bar = h('div', { class: 'bar' }, h('i'));
+          bar.firstChild.style.width = Math.max(2, Math.round(x.km / max * 100)) + '%';
+          wrap.append(h('div', { class: 'srow' },
+            h('div', { class: 'nm' }, RC.plate(x.plate), h('strong', null, x.name)),
+            h('div', { class: 'val' }, RC.fmtKm(x.km) + ' km · ' + x.n + (x.n === 1 ? ' rota' : ' rotas')),
+            bar));
+        });
+      }
+      box.replaceChildren(wrap);
+    } catch (e) { if (view.tab === 'r') box.replaceChildren(h('div', { class: 'empty' }, RC.errText(e))); }
+  }
+
   /* ---------- escala ---------- */
   async function renderSchedule() {
     $('tabV').setAttribute('aria-current', 'false');
@@ -337,6 +407,7 @@
   $('tabV').addEventListener('click', function () { setTab('v'); });
   $('tabM').addEventListener('click', function () { setTab('m'); });
   $('tabE').addEventListener('click', function () { setTab('e'); });
+  $('tabR').addEventListener('click', function () { setTab('r'); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden && profile && view.tab === 'v') loadBoard(false); });
 
   async function init() {
@@ -345,7 +416,7 @@
       if (ev === 'SIGNED_OUT' && profile) { profile = null; showLogin(); }
     });
     var p = await RC.loadProfile();
-    if (p && p.active) { profile = p; start(); return; }
+    if (p && p.active && (p.role === 'driver' || p.role === 'coord')) { profile = p; start(); return; }
     if (p) await RC.signOut();
     showLogin();
   }

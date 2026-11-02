@@ -104,6 +104,12 @@
   // Cartão de um dia (estilo do cartão da coordenação). entries: linhas da tabela schedule.
   // opts: { me: id do usuário (destaca as dele), showDriver: mostra o nome e o aceite (coordenação),
   //         onRemove: function(entry) mostra o botão de apagar, onAccept: function(entry) botão "Aceitar rota" nas rotas dele }
+  // Situação do veículo no quadro: no CD, em atendimento (fora) ou parado no CD durante a rota.
+  RC.routeState = function (v) {
+    if (!v.route_id) return { label: 'No CD', cls: 'free', away: false, available: true };
+    if (v.field_status === 'cd') return { label: 'Parado no CD', cls: 'hold', away: false, available: true };
+    return { label: 'Em atendimento', cls: 'run', away: true, available: false };
+  };
   RC.kindName = { van: 'Van', caminhao: 'Caminhão', moto: 'Moto' };
   RC.scheduleDay = function (iso, entries, opts) {
     opts = opts || {};
@@ -191,7 +197,8 @@
           await RC.signIn(u, pass.value);
           var p = await RC.loadProfile();
           if (!p || !p.active) { await RC.signOut(); throw new Error('Este acesso está desativado. Fale com a coordenação.'); }
-          if (opts.role && p.role !== opts.role) { await RC.signOut(); throw new Error('Esta área é só para a coordenação.'); }
+          var allowed = opts.roles || (opts.role ? [opts.role] : null);
+          if (allowed && allowed.indexOf(p.role) < 0) { await RC.signOut(); throw new Error(opts.deny || 'Esta área é só para a coordenação.'); }
           opts.onDone(p);
         } catch (e) {
           btn.disabled = false; pass.value = '';

@@ -175,3 +175,11 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .esc-sel{min-height:48px;flex:1;min-width:0;color:var(--ink)}
 .esc-plate.sm{font-size:1.4rem;margin-left:auto}
 .esc-warn{background:#FFF1CC;color:#7A4B00;font-weight:600;font-size:.85rem;padding:3px 10px;border-radius:8px}
+
+.pill.hold{background:#DDE8FA;color:#1D3C8A}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pill.hold{background:#1B2B4A;color:#9DBBFF}}
+
+.statusbox{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.segbtn{min-height:56px;padding:8px 10px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-weight:600;font-size:.95rem;cursor:pointer;text-wrap:balance}
+.segbtn[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}

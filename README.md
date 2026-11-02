@@ -201,3 +201,18 @@ Os motoristas veem a aba **Escala** no app, com hoje e os próximos 14 dias. As 
 - Na aba **Veículos** da coordenação, cada veículo tem um **Tipo** (Van, Caminhão ou Moto). Ele define a imagem na escala. Para usar as imagens do seu Canva, troque os arquivos `img/van.svg`, `img/caminhao.svg` e `img/moto.svg` (mesmo nome e formato SVG, ou ajuste o nome no código).
 - Na aba **Escala** do motorista, as rotas dele têm o botão **Aceitar rota**. Na tela de Veículos também aparece um aviso quando há rota de hoje para aceitar.
 - No **Painel** da coordenação aparece "Escala de hoje · X de Y aceitas", com "✔ Aceita HH:MM" ou "Aguardando aceite" em cada rota que tem motorista definido.
+
+## Responsável do CD (acesso só de consulta)
+
+Na aba **Motoristas** da coordenação, em "Novo acesso", escolha o tipo **Responsável do CD (só consulta)**. Ele entra no mesmo endereço da coordenação e vê apenas **Painel**, **Histórico** (rotas, km, horários, fotos e localização) e **Resumo**. Não consegue lançar, corrigir, excluir nem cadastrar nada, e não entra no app dos motoristas.
+
+**Atualização:** rode `supabase/atualizacao-fiscal-status-resumo.sql` no SQL Editor e atualize também a função `manage-users` (Edge Functions > manage-users > Edit > cole o `supabase/functions/manage-users/index.ts` > Deploy).
+
+## Situação durante a rota: parado no CD ou em atendimento
+
+Com a rota aberta, o motorista vê dois botões: **Em atendimento (fora do CD)** e **Parado no CD**. O Painel (coordenação e responsável do CD) mostra a situação de cada veículo e "Em atendimento" / "Disponíveis no CD" no topo. Toda rota nova começa como "Em atendimento".
+
+## Resumo para os motoristas
+
+Aba **Resumo** no app dos motoristas: km rodados, número de rotas e km por veículo, com filtro por mês. Mostra todos os veículos, mas sem nomes de outros motoristas e sem fotos.
+
