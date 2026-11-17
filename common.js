@@ -234,22 +234,35 @@
   RC.mapUrl = function (lat, lng) { return 'https://www.google.com/maps?q=' + Number(lat).toFixed(6) + ',' + Number(lng).toFixed(6); };
 
   RC.compress = function (file, loc, manual) {
-    var url = URL.createObjectURL(file);
-    return new Promise(function (res, rej) {
-      var img = new Image();
-      img.onload = function () { res(img); };
-      img.onerror = function () { rej(new Error('Não consegui abrir a foto. Tire outra.')); };
-      img.src = url;
-    }).then(function (img) {
+    // Celulares com pouca memória travam ao abrir a foto inteira (12 MP+ vira ~50 MB na memória).
+    // Por isso a foto já é decodificada reduzida (createImageBitmap com resize); se o aparelho
+    // não suportar, cai no método antigo.
+    var url = null, held = null;
+    function cleanup() { if (url) URL.revokeObjectURL(url); if (held && held.close) held.close(); }
+    function viaImage() {
+      url = URL.createObjectURL(file);
+      return new Promise(function (res, rej) {
+        var im = new Image();
+        im.onload = function () { res({ src: im, w: im.naturalWidth, h: im.naturalHeight }); };
+        im.onerror = function () { rej(new Error('Não consegui abrir a foto. Tire outra.')); };
+        im.src = url;
+      });
+    }
+    var load = (typeof createImageBitmap === 'function')
+      ? createImageBitmap(file, { resizeWidth: 1100, resizeQuality: 'medium' })
+          .then(function (b) { held = b; return { src: b, w: b.width, h: b.height }; })
+          .catch(viaImage)
+      : viaImage();
+    return load.then(function (img) {
       // manual = { at: Date } para foto lançada pela coordenação: mostra o horário informado, sem GPS.
       var stamp = (manual && manual.at ? manual.at : new Date()).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ })
         + (manual ? ' · Lançado pela coordenação' : (loc ? ' · ' + loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5) : ' · sem localização'));
       function attempt(max, q) {
-        var s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        var s = Math.min(1, max / Math.max(img.w, img.h));
         var c = document.createElement('canvas');
-        c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+        c.width = Math.round(img.w * s); c.height = Math.round(img.h * s);
         var x = c.getContext('2d');
-        x.drawImage(img, 0, 0, c.width, c.height);
+        x.drawImage(img.src, 0, 0, c.width, c.height);
         var fs = Math.max(14, Math.round(c.width * 0.035));
         x.font = '600 ' + fs + 'px sans-serif';
         var tw = x.measureText(stamp).width;
@@ -258,7 +271,7 @@
         x.fillRect(0, c.height - fs * 1.7, tw + fs, fs * 1.7);
         x.fillStyle = '#fff';
         x.fillText(stamp, fs / 2, c.height - fs * 0.5);
-        return new Promise(function (resolve) { c.toBlob(resolve, 'image/jpeg', q); });
+        return new Promise(function (resolve) { c.toBlob(function (b) { c.width = c.height = 0; resolve(b); }, 'image/jpeg', q); });
       }
       var sizes = [[960, 0.62], [900, 0.52], [800, 0.45], [700, 0.4], [600, 0.35]];
       return (async function () {
@@ -268,7 +281,7 @@
         }
         throw new Error('Não consegui reduzir a foto. Tire outra.');
       })();
-    }).then(function (r) { URL.revokeObjectURL(url); return r; }, function (e) { URL.revokeObjectURL(url); throw e; });
+    }).then(function (r) { cleanup(); return r; }, function (e) { cleanup(); throw e; });
   };
   RC.uploadPhoto = async function (uid, kind, blob) {
     var path = uid + '/' + Date.now() + '-' + kind + '.jpg';
