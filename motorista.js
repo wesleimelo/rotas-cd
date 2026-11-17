@@ -15,6 +15,7 @@
   /* ---------- início e saída ---------- */
   function showLogin() {
     clearInterval(pollT);
+    if (RC.track) RC.track.stop();
     $('who').hidden = true; $('tabs').hidden = true; RC.banner('');
     RC.loginView($('view'), { roles: ['driver', 'coord'], deny: 'Esta área é só para motoristas. Use o endereço da coordenação.', onDone: function (p) { profile = p; start(); } });
   }
@@ -49,6 +50,7 @@
     }
     RC.banner('');
     board = r.data || [];
+    if (RC.track && profile) RC.track.sync(board, profile).catch(function () {});
     try {
       var sr = await RC.sb.from('schedule').select('*').eq('day', RC.todayISO()).eq('driver_id', profile.id);
       pendingAccept = (sr.data || []).filter(function (e) { return !e.accepted_at; }).length;

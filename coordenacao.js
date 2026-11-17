@@ -8,7 +8,7 @@
   var cache = { month: '', routes: [] };
   var vehicles = [], people = [];
   var pollT = null;
-  var TABS = ['P', 'E', 'H', 'R', 'M', 'V'];
+  var TABS = ['P', 'G', 'E', 'H', 'R', 'M', 'V'];
 
   /* ---------- entrada e navegação ---------- */
   function showLogin() {
@@ -19,7 +19,7 @@
   function start() {
     $('who').hidden = false; $('tabs').hidden = false;
     // Responsável do CD: só consulta (Painel, Escala e Histórico).
-    TABS.forEach(function (k) { $('tab' + k).hidden = readOnly() && ['M', 'V', 'R'].indexOf(k) >= 0; });
+    TABS.forEach(function (k) { $('tab' + k).hidden = readOnly() && ['M', 'V', 'R', 'G'].indexOf(k) >= 0; });
     $('ttl').textContent = readOnly() ? 'Acompanhamento' : 'Coordenação';
     $('who').replaceChildren(h('div', { class: 'whoin' },
       h('div', { class: 'nm' }, h('span', { class: 'lbl' }, readOnly() ? 'Responsável do CD' : 'Coordenação'), h('strong', null, profile.full_name)),
@@ -28,15 +28,19 @@
     flt = { month: RC.lastMonths(1)[0], vehicle: 'all', driver: 'all' };
     setTab('p');
     clearInterval(pollT);
-    pollT = setInterval(function () { if (!document.hidden && profile && view.tab === 'p' && !$('view').querySelector('details[open]')) renderPanel(); }, 30000);
+    pollT = setInterval(function () {
+      if (document.hidden || !profile) return;
+      if (view.tab === 'p' && !$('view').querySelector('details[open]')) renderPanel();
+      else if (view.tab === 'g') refreshMap(false);
+    }, 30000);
   }
   function readOnly() { return !!profile && profile.role === 'fiscal'; }
   function setTab(t) {
-    if (readOnly() && ['m', 'v', 'r'].indexOf(t) >= 0) t = 'p';
+    if (readOnly() && ['m', 'v', 'r', 'g'].indexOf(t) >= 0) t = 'p';
     view.tab = t;
     TABS.forEach(function (k) { $('tab' + k).setAttribute('aria-current', k.toLowerCase() === t ? 'page' : 'false'); });
     RC.banner('');
-    ({ p: renderPanel, e: renderSchedule, h: function () { return renderHistory(true); }, r: renderSummary, m: renderPeople, v: renderVehicles })[t]();
+    ({ p: renderPanel, g: renderMap, e: renderSchedule, h: function () { return renderHistory(true); }, r: renderSummary, m: renderPeople, v: renderVehicles })[t]();
   }
   function loading() { $('view').replaceChildren(h('div', { class: 'empty' }, 'Carregando…')); }
   function fail(e) { if (/permission|JWT/i.test((e && e.message) || '')) { RC.signOut(); return; } $('view').replaceChildren(h('div', { class: 'empty' }, RC.errText(e))); }
@@ -655,6 +659,113 @@
       });
       $('view').replaceChildren(wrap);
     } catch (e) { fail(e); }
+  }
+
+  /* ---------- mapa: onde estão os veículos e o trajeto ---------- */
+  var mp = { inst: null, markers: null, track: null, rows: [], sel: '', box: null };
+  function ensureLeaflet() {
+    if (window.L) return Promise.resolve();
+    return new Promise(function (res, rej) {
+      var css = document.createElement('link'); css.rel = 'stylesheet';
+      css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.append(css);
+      var sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+      sc.onload = function () { res(); }; sc.onerror = function () { rej(new Error('Não consegui carregar o mapa. Confira a internet.')); };
+      document.head.append(sc);
+    });
+  }
+  function esc(x) { return String(x == null ? '' : x).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function ago(iso) {
+    var m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (m < 1) return 'agora';
+    if (m < 60) return 'há ' + m + ' min';
+    return 'há ' + Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+  }
+  async function renderMap() {
+    if (view.tab !== 'g') return;
+    loading();
+    try {
+      await ensureLeaflet();
+      if (view.tab !== 'g') return;
+      var mapDiv = h('div', { class: 'mapbox', id: 'mapbox', role: 'region', 'aria-label': 'Mapa dos veículos' });
+      var list = h('div', { class: 'maplist', id: 'maplist' });
+      var sel = h('select', { id: 'trkSel', class: 'input', 'aria-label': 'Ver trajeto de uma rota' }, h('option', { value: '' }, 'Trajeto de outra rota…'));
+      sel.addEventListener('change', function () { if (sel.value) showTrack(sel.value); else clearTrack(); });
+      var m = RC.msgBox();
+      var purge = h('button', { class: 'btn ghost', type: 'button' }, 'Apagar pontos com mais de 30 dias');
+      purge.addEventListener('click', async function () {
+        if (!window.confirm('Apagar os pontos de localização com mais de 30 dias?')) return;
+        var r = await sb.rpc('purge_route_points', { p_days: 30 });
+        if (r.error) RC.setMsg(m, RC.errText(r.error), 'err'); else RC.setMsg(m, r.data + ' ponto(s) apagado(s).', 'ok');
+      });
+      $('view').replaceChildren(h('div', { class: 'list' },
+        h('div', { class: 'hint' }, 'Posição enviada pelo app do motorista a cada 1 minuto, só durante a rota. Atualiza sozinho a cada 30 segundos.'),
+        mapDiv, list,
+        h('div', { class: 'card' }, h('strong', null, 'Trajetos dos últimos 7 dias'), sel, m, purge)
+      ));
+      mp.inst = window.L.map(mapDiv, { zoomControl: true }).setView([-23.4205, -51.9331], 12);
+      window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(mp.inst);
+      mp.markers = window.L.layerGroup().addTo(mp.inst);
+      mp.track = window.L.layerGroup().addTo(mp.inst);
+      mp.sel = '';
+      loadTrackOptions(sel);
+      await refreshMap(true);
+    } catch (e) { fail(e); }
+  }
+  async function loadTrackOptions(sel) {
+    var from = new Date(Date.now() - 7 * 86400000).toISOString();
+    var r = await sb.from('routes').select('id,plate,vehicle_name,driver_name,start_at,end_at,status').gte('start_at', from).order('start_at', { ascending: false });
+    if (r.error || !sel.isConnected) return;
+    (r.data || []).forEach(function (x) {
+      sel.append(h('option', { value: x.id }, new Date(x.start_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: RC.TZ }) + ' ' + RC.fmtTime(x.start_at) + ' · ' + x.plate + ' · ' + x.driver_name + (x.status === 'open' ? ' (em andamento)' : '')));
+    });
+  }
+  async function refreshMap(fit) {
+    if (view.tab !== 'g' || !mp.inst || !$('mapbox')) return;
+    var r = await sb.rpc('live_positions');
+    if (r.error) { RC.banner(RC.errText(r.error), true); return; }
+    RC.banner('');
+    mp.rows = r.data || [];
+    mp.markers.clearLayers();
+    var pts = [];
+    var list = $('maplist'); list.replaceChildren();
+    if (!mp.rows.length) list.append(h('div', { class: 'empty' }, 'Nenhum veículo em rota agora.'));
+    mp.rows.forEach(function (v) {
+      var st = RC.routeState(v);
+      var old = v.at && (Date.now() - new Date(v.at).getTime() > 15 * 60000);
+      if (v.lat != null) {
+        var icon = window.L.divIcon({ className: '', iconSize: null, html: '<span class="mk ' + (old ? 'old' : st.cls) + '">' + esc(v.plate) + '</span>' });
+        var mk = window.L.marker([v.lat, v.lng], { icon: icon }).addTo(mp.markers);
+        mk.bindPopup(h('div', null, h('strong', null, v.plate + ' · ' + v.driver_name), h('div', null, st.label), h('div', null, 'Posição ' + ago(v.at))));
+        pts.push([v.lat, v.lng]);
+      }
+      list.append(h('div', { class: 'maprow' },
+        h('div', { class: 'mi' },
+          h('strong', null, v.plate + ' · ' + (RC.kindName[v.kind] || 'Van')),
+          h('div', { class: 'hint' }, v.driver_name + ' · saiu ' + RC.fmtTime(v.start_at)),
+          h('div', { class: 'hint' }, v.at ? 'Última posição ' + ago(v.at) + (old ? ' (sem sinal há um tempo)' : '') : 'Ainda sem posição (app do motorista ainda não enviou)')
+        ),
+        h('span', { class: 'pill ' + st.cls }, st.label),
+        h('button', { class: 'btn ghost', type: 'button', onclick: function () { showTrack(v.route_id); } }, 'Trajeto')
+      ));
+    });
+    if (fit && pts.length && !mp.sel) mp.inst.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
+    setTimeout(function () { if (mp.inst) mp.inst.invalidateSize(); }, 100);
+  }
+  function clearTrack() { mp.sel = ''; if (mp.track) mp.track.clearLayers(); }
+  async function showTrack(routeId) {
+    var r = await sb.rpc('route_track', { p_route: routeId });
+    if (r.error) { RC.toast(RC.errText(r.error)); return; }
+    var pts = (r.data || []).map(function (p) { return [p.lat, p.lng]; });
+    mp.track.clearLayers(); mp.sel = routeId;
+    if (!pts.length) { RC.toast('Esta rota não tem pontos de localização.'); return; }
+    var L = window.L;
+    L.polyline(pts, { color: '#0D6B4E', weight: 5, opacity: .85 }).addTo(mp.track);
+    L.circleMarker(pts[0], { radius: 7, color: '#fff', weight: 2, fillColor: '#0D6B4E', fillOpacity: 1 }).bindTooltip('Saída').addTo(mp.track);
+    L.circleMarker(pts[pts.length - 1], { radius: 7, color: '#fff', weight: 2, fillColor: '#B3261E', fillOpacity: 1 }).bindTooltip('Última posição').addTo(mp.track);
+    mp.inst.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
+    RC.toast(pts.length + ' ponto(s) no trajeto');
+    $('mapbox').scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   /* ---------- começo ---------- */

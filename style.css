@@ -183,3 +183,26 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .segbtn{min-height:56px;padding:8px 10px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-weight:600;font-size:.95rem;cursor:pointer;text-wrap:balance}
 .segbtn[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+
+/* ---------- localização e mapa ---------- */
+.trk{display:flex;align-items:center;gap:8px;margin:8px 0;padding:8px 12px;border-radius:10px;font-weight:500;font-size:.92rem}
+.trk .dot{width:10px;height:10px;border-radius:50%;background:currentColor;flex:none}
+.trk.on{background:var(--ok-bg);color:var(--ok)}
+.trk.on .dot{animation:trkpulse 1.6s ease-in-out infinite}
+.trk.warn{background:var(--warn-bg);color:var(--warn)}
+.trk.err{background:var(--danger-bg);color:var(--danger)}
+@keyframes trkpulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.trk.on .dot{animation:none}}
+.consent{max-width:420px;width:100%;background:var(--surface);color:var(--ink);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.consent h2{margin:0;font-size:1.3rem}
+.consent p,.consent ul{margin:0}
+.consent ul{padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.consent .acts{display:flex;flex-direction:column;gap:8px}
+.consent .btn.ghost{background:transparent;color:var(--ink)}
+.mapbox{height:55vh;min-height:320px;border-radius:14px;border:1.5px solid var(--line);overflow:hidden;z-index:0}
+.maplist{display:flex;flex-direction:column;gap:8px}
+.maprow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px;background:var(--surface);border:1.5px solid var(--line);border-radius:12px}
+.maprow .mi{flex:1 1 200px;min-width:0}
+.mk{display:inline-block;transform:translate(-50%,-100%);padding:3px 8px;border-radius:8px;border:2px solid #fff;font:600 12px/1.2 'IBM Plex Mono',monospace;color:#fff;background:#0B5A41;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap}
+.mk.run{background:#8F5200}
+.mk.old{background:#6b6b6b}

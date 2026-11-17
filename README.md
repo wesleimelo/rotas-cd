@@ -216,3 +216,8 @@ Com a rota aberta, o motorista vê dois botões: **Parado no CD** (já marcado a
 
 Aba **Resumo** no app dos motoristas: km rodados, número de rotas e km por veículo, com filtro por mês. Mostra todos os veículos, mas sem nomes de outros motoristas e sem fotos.
 
+
+## Localização durante a rota e app Android
+
+Veja `app-android/LEIA-ME.md` (gerar o APK pelo GitHub e instalar) e rode `atualizacao-localizacao.sql`
+no Supabase. A coordenação vê a aba **Mapa**; os pontos de localização são apagados depois de 30 dias.
