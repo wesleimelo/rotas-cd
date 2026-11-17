@@ -1,0 +1,66 @@
+name: Gerar APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app-android
+    env:
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Conferir o endereço do site
+        run: |
+          if [ -z "$SITE_URL" ]; then
+            echo "::error::Falta a variável SITE_URL."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+
+      - name: Criar o projeto Android
+        run: npx cap add android
+
+      - name: Permissões extras (câmera)
+        run: |
+          python3 - <<'PY'
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p, encoding='utf-8').read()
+          extra = '    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n'
+          if 'android.permission.CAMERA' not in s:
+              s = s.replace('</manifest>', extra + '</manifest>')
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+
+      - name: Ícones do app
+        continue-on-error: true
+        run: npx capacitor-assets generate --android
+
+      - name: Sincronizar
+        run: npx cap sync android
+
+      - name: Compilar o APK
+        working-directory: app-android/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Guardar o APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rotas-cd-apk
+          path: app-android/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
