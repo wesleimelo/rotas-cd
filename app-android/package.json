@@ -1,0 +1,15 @@
+{
+  "name": "rotas-cd-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Casca Android do sistema Rotas do CD (abre o site e grava a localização durante a rota)",
+  "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor-community/background-geolocation": "^1.2.26"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.1",
+    "@capacitor/assets": "^3.0.5"
+  }
+}
