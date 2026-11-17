@@ -206,3 +206,5 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .mk{display:inline-block;transform:translate(-50%,-100%);padding:3px 8px;border-radius:8px;border:2px solid #fff;font:600 12px/1.2 'IBM Plex Mono',monospace;color:#fff;background:#0B5A41;box-shadow:0 1px 4px rgba(0,0,0,.4);white-space:nowrap}
 .mk.run{background:#8F5200}
 .mk.old{background:#6b6b6b}
+.snaprow{display:flex;align-items:flex-start;gap:10px;font-size:.9rem;color:var(--muted)}
+.snaprow input{margin-top:3px;width:18px;height:18px;flex:none}

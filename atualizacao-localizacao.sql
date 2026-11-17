@@ -93,8 +93,8 @@ begin
     t := coalesce(nullif(e->>'at', '')::timestamptz, now());
     if t < r.start_at or t > now() + interval '2 minutes' then continue; end if;
     if r.end_at is not null and t > r.end_at then continue; end if;
-    -- evita pontos repetidos em menos de 20 s
-    if last_at is not null and abs(extract(epoch from (t - last_at))) < 20 then continue; end if;
+    -- evita pontos repetidos em menos de 10 s
+    if last_at is not null and abs(extract(epoch from (t - last_at))) < 10 then continue; end if;
     insert into public.route_points (route_id, vehicle_id, driver_id, at, lat, lng, accuracy, speed)
     values (r.id, r.vehicle_id, r.driver_id, t, la, lo,
             nullif(e->>'acc', '')::real, nullif(e->>'spd', '')::real);
@@ -143,6 +143,25 @@ as $$
 $$;
 revoke all on function public.route_track(uuid) from public, anon;
 grant execute on function public.route_track(uuid) to authenticated;
+
+-- Trilhas de todas as rotas abertas de uma vez (o mapa ao vivo desenha a linha por onde cada veículo passou).
+create or replace function public.live_tracks()
+returns table (route_id uuid, lat double precision, lng double precision, at timestamptz)
+language sql stable security definer set search_path = public
+as $$
+  select x.route_id, x.lat, x.lng, x.at
+    from (
+      select p.route_id, p.lat, p.lng, p.at,
+             row_number() over (partition by p.route_id order by p.at desc) as rn
+        from public.route_points p
+        join public.routes r on r.id = p.route_id and r.status = 'open'
+       where public.is_coord()
+    ) x
+   where x.rn <= 2500
+   order by x.route_id, x.at;
+$$;
+revoke all on function public.live_tracks() from public, anon;
+grant execute on function public.live_tracks() to authenticated;
 
 -- Apaga pontos antigos. A coordenação pode chamar pelo sistema; o pg_cron chama todo dia.
 create or replace function public.purge_route_points(p_days integer default 30)

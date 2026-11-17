@@ -1,11 +1,11 @@
 // Gravação da localização do veículo enquanto a rota do motorista está aberta.
 //  - No app Android (Capacitor): usa o plugin BackgroundGeolocation, que continua com a tela apagada.
 //  - No navegador: usa a geolocalização do site e mantém a tela ligada (só funciona com o app aberto).
-// Grava no máximo 1 ponto por minuto. Se ficar sem internet, guarda e envia depois.
+// Grava no máximo 1 ponto a cada 20 segundos. Se ficar sem internet, guarda e envia depois.
 (function () {
   'use strict';
   var RC = window.RC, h = RC.h;
-  var INTERVAL_MS = 60000;          // um ponto por minuto
+  var INTERVAL_MS = 20000;          // um ponto a cada 20 segundos (trajeto mais fiel)
   var MAX_BUFFER = 500;             // limite de pontos guardados sem internet
   var T = { routeId: null, watcher: null, webId: null, wake: null, buf: [], lastAt: 0, sending: false, state: 'off', asked: false };
 
@@ -55,7 +55,7 @@
   function onPoint(lat, lng, acc, spd, atMs) {
     if (!T.routeId) return;
     var at = atMs || Date.now();
-    if (at - T.lastAt < INTERVAL_MS - 2000) return;
+    if (at - T.lastAt < INTERVAL_MS - 2000) return;     // margem de 2 s
     T.lastAt = at;
     T.buf.push({ lat: +lat.toFixed(6), lng: +lng.toFixed(6), acc: acc == null ? null : Math.round(acc), spd: spd == null ? null : +(+spd).toFixed(1), at: new Date(at).toISOString() });
     if (T.buf.length > MAX_BUFFER) T.buf = T.buf.slice(-MAX_BUFFER);
