@@ -157,8 +157,7 @@
     var prev = h('img', { class: 'preview', alt: 'Foto do odômetro', hidden: true });
     var btn = h('label', { class: 'photobtn', for: inputId }, '📷 ' + label);
     var inp = h('input', { id: inputId, type: 'file', accept: 'image/*', capture: 'environment' });
-    inp.addEventListener('change', function () {
-      var f = inp.files && inp.files[0]; if (!f) return;
+    function handle(f) {
       onMsg('Obtendo a localização e preparando a foto…', 'warn');
       RC.getLocation().then(function (loc) {
         return RC.compress(f, loc).then(function (p) {
@@ -169,6 +168,35 @@
           else onMsg('Não consegui a localização. Ative o GPS e permita a localização para este site, depois tire a foto de novo. Se não conseguir, pode continuar sem ela.', 'warn');
         });
       }).catch(function (e) { onMsg(RC.errText(e), 'err'); });
+    }
+    // No app Android a foto só pode vir da câmera (sem galeria).
+    function nativeCamera() {
+      var C = window.Capacitor;
+      if (!(C && C.isNativePlatform && C.isNativePlatform() && C.registerPlugin)) return null;
+      return C.registerPlugin('Camera');
+    }
+    inp.addEventListener('click', function (ev) {
+      var cam = nativeCamera();
+      if (!cam) return;
+      ev.preventDefault();
+      cam.getPhoto({ source: 'CAMERA', resultType: 'base64', quality: 80, width: 1600, correctOrientation: true, saveToGallery: false })
+        .then(function (ph) {
+          var bin = atob(ph.base64String), arr = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          handle(new File([arr], 'odometro.jpg', { type: 'image/' + (ph.format || 'jpeg'), lastModified: Date.now() }));
+        })
+        .catch(function (e) { if (!/cancel/i.test((e && e.message) || '')) onMsg('Não consegui abrir a câmera. Permita o uso da câmera para o app.', 'err'); });
+    });
+    // No navegador, alguns celulares ignoram "só câmera" e abrem a galeria.
+    // Foto tirada agora tem data de agora; foto antiga da galeria é recusada.
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0]; if (!f) return;
+      if (f.lastModified && Date.now() - f.lastModified > 5 * 60000) {
+        inp.value = '';
+        onMsg('Esta foto não foi tirada agora. Use a câmera para fotografar o odômetro (fotos da galeria não são aceitas).', 'err');
+        return;
+      }
+      handle(f);
     });
     if (draft.photo) { prev.src = draft.photo.url; prev.hidden = false; btn.textContent = '📷 Trocar foto'; }
     return h('div', { class: 'photo' }, inp, btn, prev);
