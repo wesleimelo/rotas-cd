@@ -664,7 +664,7 @@
   }
 
   /* ---------- mapa: onde estão os veículos e o trajeto ---------- */
-  var mp = { inst: null, live: null, track: null, mk: {}, trails: {}, rows: [], sel: '', gen: 0, snapOn: true };
+  var mp = { inst: null, live: null, track: null, mk: {}, trails: {}, rows: [], sel: '', only: '', gen: 0, snapOn: true };
   try { mp.snapOn = localStorage.getItem('rc_snap') !== '0'; } catch (e) { /* sem armazenamento */ }
   var OSRM = 'https://router.project-osrm.org/match/v1/driving/';
   var snapCache = {};          // chave -> { coords, len, at, ok }
@@ -740,13 +740,13 @@
     function paint() {
       if (gen !== mp.gen || !mp.live) return;
       mp.live.clearLayers();
-      rows.forEach(function (v) { if (v._line && v._line.length > 1) window.L.polyline(v._line, { color: colorOf(v), weight: 5, opacity: .85, lineJoin: 'round' }).addTo(mp.live); });
+      rows.forEach(function (v) { if (mp.only && v.route_id !== mp.only) return; if (v._line && v._line.length > 1) window.L.polyline(v._line, { color: colorOf(v), weight: 5, opacity: .85, lineJoin: 'round' }).addTo(mp.live); });
     }
     paint();
     if (!mp.snapOn) return;
     for (var i = 0; i < rows.length; i++) {
       var v = rows[i], pts = mp.trails[v.route_id] || [];
-      if (pts.length < 2) continue;
+      if (pts.length < 2 || (mp.only && v.route_id !== mp.only)) continue;
       v._line = await snappedPath(v.route_id, pts);
       if (gen !== mp.gen) return;
       paint();
@@ -795,6 +795,7 @@
       });
       $('view').replaceChildren(h('div', { class: 'list' },
         h('div', { class: 'hint' }, 'O app do motorista envia a posição a cada 20 segundos, só durante a rota. O mapa atualiza sozinho e a linha mostra por onde cada veículo já passou.'),
+        h('div', { class: 'chips', id: 'mapchips', role: 'group', 'aria-label': 'Escolher veículo' }),
         mapDiv, list,
         h('label', { class: 'snaprow', for: 'snapOn' }, snapBox, h('span', null, 'Ajustar a linha às ruas (envia as posições a um serviço gratuito de mapas, o OSRM)')),
         h('div', { class: 'card' }, h('strong', null, 'Trajetos dos últimos 7 dias'), sel, m, purge)
@@ -835,10 +836,12 @@
       var st = RC.routeState(v);
       var old = v.at && (Date.now() - new Date(v.at).getTime() > 15 * 60000);
       if (v.lat != null) {
-        var icon = window.L.divIcon({ className: '', iconSize: null, html: '<span class="mk ' + (old ? 'old' : st.cls) + '">' + esc(v.plate) + '</span>' });
+        var kind = RC.kindName[v.kind] ? v.kind : 'van';
+        var icon = window.L.divIcon({ className: '', iconSize: null, html: '<span class="mk2 ' + (old ? 'old' : st.cls) + '"><img src="img/' + kind + '.svg" alt="' + esc(RC.kindName[kind]) + '" width="38" height="32"></span>' });
         var mk = mp.mk[v.route_id];
         if (!mk) { mk = mp.mk[v.route_id] = window.L.marker([v.lat, v.lng], { icon: icon }).addTo(mp.inst); }
         else { mk.setIcon(icon); glide(mk, [v.lat, v.lng], 9000); }
+        mk.unbindTooltip().bindTooltip(v.plate, { direction: 'top', offset: [0, -24] });
         mk.unbindPopup().bindPopup(h('div', null, h('strong', null, v.plate + ' · ' + v.driver_name), h('div', null, st.label), h('div', null, 'Posição ' + ago(v.at))));
         pts.push([v.lat, v.lng]);
       }
@@ -853,17 +856,48 @@
       ));
     });
     Object.keys(mp.mk).forEach(function (id) { if (!seen[id]) { mp.inst.removeLayer(mp.mk[id]); delete mp.mk[id]; } });
+    if (mp.only && !seen[mp.only]) mp.only = '';
+    applyOnly(false);
+    renderChips();
     drawTrails(gen);
+    if (mp.only && mp.mk[mp.only] && !fit) { var cur = mp.mk[mp.only].getLatLng(); if (!mp.inst.getBounds().pad(-0.2).contains(cur)) mp.inst.panTo(cur); }
     if (fit && pts.length && !mp.sel) mp.inst.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
     setTimeout(function () { if (mp.inst) mp.inst.invalidateSize(); }, 100);
   }
-  function focusRoute(v) {
-    var tr = (mp.trails && mp.trails[v.route_id]) || (v.lat != null ? [{ lat: v.lat, lng: v.lng }] : []);
-    if (!tr.length) { RC.toast('Este veículo ainda não enviou posição.'); return; }
-    mp.sel = '';
-    mp.inst.fitBounds(tr.map(function (p) { return [p.lat, p.lng]; }), { padding: [40, 40], maxZoom: 16 });
+  // Mostra no mapa só um veículo (id da rota) ou todos (id vazio).
+  function applyOnly(fitNow) {
+    Object.keys(mp.mk).forEach(function (id) {
+      var show = !mp.only || id === mp.only, m = mp.mk[id], on = mp.inst.hasLayer(m);
+      if (show && !on) m.addTo(mp.inst); else if (!show && on) mp.inst.removeLayer(m);
+    });
+    if (!fitNow) return;
+    var list = mp.rows.filter(function (v) { return v.lat != null && (!mp.only || v.route_id === mp.only); });
+    var pts = [];
+    list.forEach(function (v) {
+      var tr = mp.trails[v.route_id];
+      if (mp.only && tr && tr.length) tr.forEach(function (p) { pts.push([p.lat, p.lng]); }); else pts.push([v.lat, v.lng]);
+    });
+    if (!pts.length) { RC.toast('Este veículo ainda não enviou posição.'); return; }
+    mp.inst.fitBounds(pts, { padding: [40, 40], maxZoom: mp.only ? 16 : 15 });
+  }
+  function pick(id) {
+    mp.only = id; mp.sel = ''; if (mp.track) mp.track.clearLayers();
+    var s = document.getElementById('trkSel'); if (s) s.value = '';
+    applyOnly(true); renderChips(); mp.gen++; drawTrails(mp.gen);
     $('mapbox').scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
+  function renderChips() {
+    var box = $('mapchips'); if (!box) return;
+    box.replaceChildren();
+    function chip(label, id, kind) {
+      var on = mp.only === id;
+      box.append(h('button', { class: 'chip' + (on ? ' on' : ''), type: 'button', 'aria-pressed': on ? 'true' : 'false', onclick: function () { pick(id); } },
+        kind ? h('img', { src: 'img/' + kind + '.svg', alt: '', width: '26', height: '22' }) : null, label));
+    }
+    if (mp.rows.length > 1 || mp.only) chip('Todos', '', null);
+    mp.rows.forEach(function (v) { chip(v.plate, v.route_id, RC.kindName[v.kind] ? v.kind : 'van'); });
+  }
+  function focusRoute(v) { pick(v.route_id); }
   function clearTrack() { mp.sel = ''; if (mp.track) mp.track.clearLayers(); }
   async function showTrack(routeId) {
     var r = await sb.rpc('route_track', { p_route: routeId });

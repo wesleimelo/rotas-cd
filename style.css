@@ -208,3 +208,11 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .mk.old{background:#6b6b6b}
 .snaprow{display:flex;align-items:flex-start;gap:10px;font-size:.9rem;color:var(--muted)}
 .snaprow input{margin-top:3px;width:18px;height:18px;flex:none}
+.mk2{display:flex;align-items:center;justify-content:center;transform:translate(-50%,-50%);width:50px;height:50px;border-radius:50%;background:#fff;border:4px solid #0B5A41;box-shadow:0 2px 6px rgba(0,0,0,.45)}
+.mk2.run{border-color:#C26E00}
+.mk2.old{border-color:#6b6b6b;filter:grayscale(1)}
+.mk2 img{display:block;max-width:34px;height:auto}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 4px;-webkit-overflow-scrolling:touch}
+.chip{display:inline-flex;align-items:center;gap:6px;flex:none;min-height:44px;padding:6px 14px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:600 .95rem 'IBM Plex Mono',monospace;cursor:pointer}
+.chip.on{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.chip img{display:block}
